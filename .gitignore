@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+.venv/
+
+# Experiment outputs are reproducible from the scripts.
+result/local_dimension/
+result/pca_lime/
+result/fisher_lime/
+result/generalization/
+result/stability/
+result/fisher_regularization/
+result/global_local_dimension/
+result/pca_fidelity_tradeoff/
+result/pca_rotation_sparse_pca/
