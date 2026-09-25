@@ -462,15 +462,24 @@ def main() -> None:
     summary.to_csv(args.output_dir / "overall_summary.csv", index=False)
     pd.DataFrame(model_rows).to_csv(args.output_dir / "model_metadata.csv", index=False)
 
-    plot = summary.set_index("method").loc[
-        ["ordinary_lime", "pca_lime", "hard_fisher_lime", "soft_fisher_lime"]
-    ]
+    # The main figure uses the paired subset so every bar is computed on the
+    # same neighborhoods. Its conclusion applies to that subset only, which
+    # excludes neighborhoods where some method (usually hard Fisher) failed.
+    method_order = ["ordinary_lime", "pca_lime", "hard_fisher_lime", "soft_fisher_lime"]
+    plot = paired_summary.set_index("method").reindex(method_order)
     axis = plot[["mean_coefficient_cosine", "mean_top_feature_jaccard"]].plot(
         kind="bar", figsize=(9, 5), rot=15
     )
     axis.set_ylim(0, 1.05)
     axis.set_ylabel("Mean pairwise stability")
+    common = int(plot["common_neighborhoods"].max()) if not plot.empty else 0
+    total = int(plot["total_neighborhoods"].max()) if not plot.empty else 0
+    axis.set_title(
+        f"Paired comparison on {common} of {total} neighborhoods "
+        "where every method was available"
+    )
     axis.grid(axis="y", alpha=0.25)
+    axis.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=2)
     plt.tight_layout()
     plt.savefig(args.output_dir / "stability_comparison.png", dpi=180)
     plt.close()

@@ -8,10 +8,11 @@ target by target. For each neighborhood the script records
 
 * output-side dimension: q95, participation ratio, variation energy;
 * competing classes: argmax classes, classes whose probability reaches a
-  threshold, and the variance-effective number of moving classes;
-* linear-side dimension: effective rank of the ordinary LIME coefficient
-  matrix (features x classes), which bounds what an output-compressed linear
-  surrogate can retain;
+  threshold (an upper bound that includes high but constant classes), and
+  moving classes that carry 95% of the output variance;
+* linear-side dimension: effective rank of the ordinary LIME surrogate's
+  predicted variation BᵀΣB in the neighborhood (``linear_q95``) and of the
+  coefficient matrix B alone (``coefficient_q95``);
 * held-out fidelity of compression only, ordinary LIME and PCA-LIME, their
   paired difference, and the error at the explained point itself.
 
@@ -48,6 +49,7 @@ from fisher_lime.diagnostics import (
     coefficient_matrix_dimension,
     linear_energy_in_subspace,
     participation_ratio,
+    weighted_feature_covariance,
     weighted_output_r2,
 )
 from fisher_lime.local_dimension import analyze_local_probabilities, fit_weighted_pca
@@ -222,7 +224,11 @@ def evaluate_configuration(
                     analysis = analyze_local_probabilities(fit_p, fit_w)
                     activity = class_activity(fit_p, fit_w, args.activity_threshold)
                     ordinary = fit_weighted_ridge(fit_f, fit_p, fit_w, args.ridge_alpha)
-                    linear = coefficient_matrix_dimension(ordinary.coefficients)
+                    feature_covariance = weighted_feature_covariance(fit_f, fit_w)
+                    linear = coefficient_matrix_dimension(
+                        ordinary.coefficients, feature_covariance=feature_covariance
+                    )
+                    coefficient = coefficient_matrix_dimension(ordinary.coefficients)
                     ordinary_eval = ordinary.predict(eval_f)
                     ordinary_r2 = weighted_output_r2(eval_p, ordinary_eval, eval_w)
                     ordinary_target_error = float(
@@ -256,11 +262,13 @@ def evaluate_configuration(
                             ),
                             "argmax_classes": activity.argmax_classes,
                             "active_classes": activity.active_classes,
+                            "moving_classes": activity.moving_classes,
                             "variance_effective_classes": (
                                 activity.variance_effective_classes
                             ),
                             "linear_q95": linear.effective_dimension_95,
                             "linear_participation_ratio": linear.participation_ratio,
+                            "coefficient_q95": coefficient.effective_dimension_95,
                             "ordinary_r2": ordinary_r2,
                             "ordinary_rmse": weighted_output_rmse(
                                 eval_p, ordinary_eval, eval_w
@@ -296,13 +304,19 @@ def evaluate_configuration(
                             "output_q95": output_q95,
                             "linear_q95": linear.effective_dimension_95,
                             "active_classes": activity.active_classes,
+                            "moving_classes": activity.moving_classes,
                             "compression_r2": weighted_output_r2(
                                 eval_p, compression_only, eval_w
                             ),
                             "ordinary_r2": ordinary_r2,
                             "compressed_r2": compressed_r2,
                             "r2_loss": ordinary_r2 - compressed_r2,
-                            "linear_energy_retained": linear_energy_in_subspace(
+                            "linear_prediction_retained": linear_energy_in_subspace(
+                                ordinary.coefficients,
+                                pca.components,
+                                feature_covariance,
+                            ),
+                            "coefficient_energy_retained": linear_energy_in_subspace(
                                 ordinary.coefficients, pca.components
                             ),
                             "ordinary_argmax_agreement": weighted_argmax_agreement(
@@ -378,10 +392,14 @@ def add_strata(frame: pd.DataFrame) -> pd.DataFrame:
 
 def summarize_mechanism(neighborhoods: pd.DataFrame) -> pd.DataFrame:
     frame = add_strata(neighborhoods)
+    # q95 < moving - 1 means the classes that actually move change together
+    # (fewer directions than they could span). Comparing with active classes
+    # alone would also count high but constant classes.
     frame = frame.assign(
         active_minus_one=frame["active_classes"] - 1,
+        moving_minus_one=frame["moving_classes"] - 1,
         q95_below_active=frame["output_q95"] < frame["active_classes"] - 1,
-        q95_above_active=frame["output_q95"] > frame["active_classes"] - 1,
+        q95_below_moving=frame["output_q95"] < frame["moving_classes"] - 1,
         linear_below_output=frame["linear_q95"] < frame["output_q95"],
     )
     return (
@@ -395,13 +413,15 @@ def summarize_mechanism(neighborhoods: pd.DataFrame) -> pd.DataFrame:
             mean_variation_energy=("variation_energy", "mean"),
             mean_argmax_classes=("argmax_classes", "mean"),
             mean_active_minus_one=("active_minus_one", "mean"),
+            mean_moving_minus_one=("moving_minus_one", "mean"),
             mean_variance_effective_classes=("variance_effective_classes", "mean"),
             mean_output_q95=("output_q95", "mean"),
             mean_output_pr=("output_participation_ratio", "mean"),
             mean_linear_q95=("linear_q95", "mean"),
             mean_linear_pr=("linear_participation_ratio", "mean"),
+            mean_coefficient_q95=("coefficient_q95", "mean"),
             share_q95_below_active=("q95_below_active", "mean"),
-            share_q95_above_active=("q95_above_active", "mean"),
+            share_q95_below_moving=("q95_below_moving", "mean"),
             share_linear_below_output=("linear_below_output", "mean"),
             mean_ordinary_r2=("ordinary_r2", "mean"),
         )
@@ -441,7 +461,12 @@ def summarize_fidelity(
                 "mean_compressed_r2": group["compressed_r2"].mean(),
                 "mean_r2_loss": group["r2_loss"].mean(),
                 "median_r2_loss": group["r2_loss"].median(),
-                "mean_linear_energy_retained": group["linear_energy_retained"].mean(),
+                "mean_linear_prediction_retained": group[
+                    "linear_prediction_retained"
+                ].mean(),
+                "mean_coefficient_energy_retained": group[
+                    "coefficient_energy_retained"
+                ].mean(),
                 "rate_compression_r2_ok": group["compression_ok"].mean(),
                 "rate_ordinary_faithful": group["ordinary_ok"].mean(),
                 "rate_compressed_faithful": group["compressed_ok"].mean(),
@@ -572,8 +597,9 @@ def main() -> None:
                 [
                     "classes", "black_box", "neighborhood", "radius",
                     "neighborhoods", "mean_off_span_fraction",
-                    "mean_active_minus_one", "mean_output_q95", "mean_output_pr",
-                    "mean_linear_q95", "share_q95_below_active",
+                    "mean_active_minus_one", "mean_moving_minus_one",
+                    "mean_output_q95", "mean_output_pr", "mean_linear_q95",
+                    "share_q95_below_active", "share_q95_below_moving",
                 ]
             ].round(3).to_string(index=False)
         )

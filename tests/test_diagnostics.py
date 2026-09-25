@@ -8,6 +8,7 @@ from fisher_lime.diagnostics import (
     class_activity,
     coefficient_matrix_dimension,
     linear_energy_in_subspace,
+    weighted_feature_covariance,
     weighted_output_r2,
 )
 from fisher_lime.local_dimension import fit_weighted_pca
@@ -47,7 +48,54 @@ class DiagnosticsTest(unittest.TestCase):
 
         self.assertEqual(activity.argmax_classes, 2)
         self.assertEqual(activity.active_classes, 3)
+        self.assertEqual(activity.moving_classes, 2)
         self.assertAlmostEqual(activity.variance_effective_classes, 2.0)
+
+    def test_constant_high_classes_are_active_but_not_moving(self) -> None:
+        # Two classes trade probability while three stay at 0.10: the output
+        # is one-dimensional because only two classes move, not because a
+        # group of five moves together.
+        coordinate = np.linspace(-0.2, 0.2, 51)
+        constant = np.full_like(coordinate, 0.10)
+        probabilities = np.column_stack(
+            [0.35 + coordinate, 0.35 - coordinate, constant, constant, constant]
+        )
+        activity = class_activity(probabilities, np.ones(51), 0.05)
+
+        self.assertEqual(activity.active_classes, 5)
+        self.assertEqual(activity.moving_classes, 2)
+
+    def test_prediction_retention_differs_from_coefficient_retention(self) -> None:
+        # Two equal coefficient rows mapping to different class directions.
+        # When the first input barely varies, dropping its class direction
+        # removes half the coefficient energy but almost no predicted change.
+        coefficients = np.array([[1.0, -1.0, 0.0], [0.0, 1.0, -1.0]])
+        basis = np.array([[0.0, 1.0, -1.0]]) / np.sqrt(2.0)
+        covariance = np.diag([0.01, 1.0])
+
+        coefficient_share = linear_energy_in_subspace(coefficients, basis)
+        prediction_share = linear_energy_in_subspace(coefficients, basis, covariance)
+
+        self.assertLess(coefficient_share, 0.8)
+        self.assertGreater(prediction_share, 0.99)
+        self.assertEqual(
+            coefficient_matrix_dimension(coefficients).effective_dimension_95, 2
+        )
+        self.assertEqual(
+            coefficient_matrix_dimension(
+                coefficients, feature_covariance=covariance
+            ).effective_dimension_95,
+            1,
+        )
+
+    def test_weighted_feature_covariance_matches_numpy(self) -> None:
+        rng = np.random.default_rng(9)
+        features = rng.normal(size=(200, 3))
+        weights = rng.uniform(0.1, 1.0, size=200)
+        expected = np.cov(features, rowvar=False, aweights=weights, bias=True)
+        np.testing.assert_allclose(
+            weighted_feature_covariance(features, weights), expected, atol=1e-12
+        )
 
     def test_linear_energy_matches_compressed_surrogate(self) -> None:
         rng = np.random.default_rng(4)
