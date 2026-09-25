@@ -89,6 +89,27 @@ python experiments/pca_fidelity_tradeoff_study.py
 - `model_comparison.csv`: BB・軸数別の主要指標
 - `model_comparison.png`: 5・8・10軸でのBB横断比較
 
+## 同一近傍での一貫評価（局所次元と忠実性の接続）
+
+同じBB・同じ説明対象・同じ近傍分布で、局所出力次元、競合クラス数、通常LIMEの
+係数行列の有効ランク、圧縮のみ・通常LIME・PCA-LIMEのheld-out忠実性を対象ごとに
+並べて記録します。近傍はisotropic Gaussian（従来）と、標準化学習データの共分散に
+沿ったGaussian（データの線形従属を保つ）を選べます。
+
+```bash
+python3 experiments/unified_local_evaluation.py
+```
+
+結果は `result/unified_local_evaluation/` に生成されます。
+
+- `neighborhoods.csv`: 近傍ごとの次元・競合クラス数・係数行列ランク・通常LIME忠実性
+- `dimension_evaluations.csv`: 近傍×軸数（固定軸、出力q95、線形q95）ごとの評価
+- `mechanism_summary.csv`: 「競合クラス数−1」と出力次元・線形次元の比較
+- `fidelity_summary.csv`: 忠実性、対応のあるR²損失（seed→対象の階層bootstrap）、
+  絶対忠実性と追加損失の合格率。`stratum`で出力ほぼ一定の近傍を分離
+- `fidelity_by_seed.csv`: 同じ集計のseed別結果
+- `fidelity_by_dimension.png`: 軸数ごとのheld-out R²
+
 ## PCA圧縮LIMEと通常LIMEの比較
 
 学習用とは別の摂動点を使い、通常の多出力局所線形回帰と、PCAで出力を
@@ -137,6 +158,11 @@ python3 experiments/stability_study.py
 
 PCA・Fisher軸については、1軸が実効的に何クラスを含むかと、絶対負荷量のうち
 上位2クラスが占める割合も記録します。
+
+`paired_summary.csv`は全手法が全反復で利用可能だった近傍だけで比較した結果、
+`paired_differences.csv`は同じ近傍での通常LIMEとの差です。上位特徴数が入力特徴数
+以上の場合（Irisなど）はJaccardが必ず1になるため、NaNとして報告します。
+hard Fisherが要求より少ない軸しか返さなかった割合は`dimension_shortfall_rate`です。
 
 Fisher散布行列の正則化感度は次で確認できます。
 
