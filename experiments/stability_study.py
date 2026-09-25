@@ -130,7 +130,16 @@ def build_artifact(
     }
 
 
-def summarize_artifacts(artifacts: list[dict]) -> dict[str, float]:
+def summarize_artifacts(
+    artifacts: list[dict], top_features_trivial: bool = False
+) -> dict[str, float]:
+    """Mean pairwise stability across repetitions.
+
+    When every feature is selected as a "top" feature, Jaccard is 1 by
+    construction, so it is reported as NaN instead of as evidence of
+    stability.
+    """
+
     if len(artifacts) < 2:
         return {
             "pair_count": 0,
@@ -151,11 +160,69 @@ def summarize_artifacts(artifacts: list[dict]) -> dict[str, float]:
     return {
         "pair_count": len(coefficient_values),
         "coefficient_cosine": float(np.mean(coefficient_values)),
-        "top_feature_jaccard": float(np.mean(feature_values)),
+        "top_feature_jaccard": np.nan
+        if top_features_trivial
+        else float(np.mean(feature_values)),
         "subspace_similarity": float(np.mean(subspace_values))
         if subspace_values
         else np.nan,
     }
+
+
+PAIR_KEYS = ["dataset", "black_box", "target_index", "radius"]
+
+
+def summarize_paired(target_frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Compare methods only on neighborhoods where all of them always worked.
+
+    Averaging each method over its own successful neighborhoods can reverse
+    conclusions, because a method that fails on hard neighborhoods is scored
+    only on easy ones. Differences are taken against ordinary LIME on the
+    same neighborhood.
+    """
+
+    availability = target_frame.pivot_table(
+        index=PAIR_KEYS, columns="method", values="availability_rate"
+    )
+    complete = availability[(availability >= 1.0).all(axis=1)].index
+    common = target_frame.set_index(PAIR_KEYS).loc[complete].reset_index()
+    metrics = ["coefficient_cosine", "top_feature_jaccard", "subspace_similarity"]
+    summary = (
+        common.groupby("method", as_index=False)
+        .agg(
+            common_neighborhoods=("target_index", "count"),
+            total_neighborhoods=("availability_rate", lambda _: len(availability)),
+            mean_dimension=("mean_dimension", "mean"),
+            **{f"mean_{metric}": (metric, "mean") for metric in metrics},
+        )
+        .sort_values("method")
+    )
+    baseline = common[common["method"] == "ordinary_lime"].set_index(PAIR_KEYS)
+    rows = []
+    for method, group in common.groupby("method"):
+        if method == "ordinary_lime":
+            continue
+        joined = group.set_index(PAIR_KEYS).join(
+            baseline[["coefficient_cosine", "top_feature_jaccard"]],
+            rsuffix="_ordinary",
+        )
+        for metric in ["coefficient_cosine", "top_feature_jaccard"]:
+            difference = joined[metric] - joined[f"{metric}_ordinary"]
+            difference = difference[np.isfinite(difference)]
+            rows.append(
+                {
+                    "method": method,
+                    "metric": metric,
+                    "pairs": int(difference.size),
+                    "mean_difference_vs_ordinary": float(difference.mean())
+                    if difference.size
+                    else np.nan,
+                    "share_better_than_ordinary": float((difference > 0).mean())
+                    if difference.size
+                    else np.nan,
+                }
+            )
+    return summary, pd.DataFrame(rows)
 
 
 def main() -> None:
@@ -185,6 +252,7 @@ def main() -> None:
             feature_count = x_test_scaled.shape[1]
             class_count = test_probabilities.shape[1]
             top_feature_count = min(args.top_features, feature_count)
+            top_features_trivial = top_feature_count >= feature_count
             selected = select_margin_strata(
                 test_probabilities, args.targets_per_margin, rng
             )
@@ -269,6 +337,9 @@ def main() -> None:
                                 )
                                 repeat_rows.append(
                                     {
+                                        "requested_dimension": class_count
+                                        if method == "ordinary_lime"
+                                        else dimension,
                                         "dataset": dataset_name,
                                         "black_box": model_name,
                                         "target_index": int(target_index),
@@ -294,7 +365,9 @@ def main() -> None:
                                 )
 
                         for method, method_artifacts in artifacts.items():
-                            stability = summarize_artifacts(method_artifacts)
+                            stability = summarize_artifacts(
+                                method_artifacts, top_features_trivial
+                            )
                             target_rows.append(
                                 {
                                     "dataset": dataset_name,
@@ -305,6 +378,7 @@ def main() -> None:
                                     "method": method,
                                     "availability_rate": len(method_artifacts)
                                     / args.repetitions,
+                                    "top_features_trivial": top_features_trivial,
                                     "mean_dimension": np.mean(
                                         [a["dimension"] for a in method_artifacts]
                                     )
@@ -348,6 +422,9 @@ def main() -> None:
             )
 
     repeat_frame = pd.DataFrame(repeat_rows)
+    repeat_frame["dimension_shortfall"] = repeat_frame["available"] & (
+        repeat_frame["dimension"] < repeat_frame["requested_dimension"]
+    )
     target_frame = pd.DataFrame(target_rows)
     summary = (
         target_frame.groupby("method", as_index=False)
@@ -367,7 +444,19 @@ def main() -> None:
         .sort_values("method")
     )
 
+    shortfall = (
+        repeat_frame[repeat_frame["available"]]
+        .groupby("method", as_index=False)
+        .agg(dimension_shortfall_rate=("dimension_shortfall", "mean"))
+    )
+    summary = summary.merge(shortfall, on="method", how="left")
+    paired_summary, paired_differences = summarize_paired(target_frame)
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    paired_summary.to_csv(args.output_dir / "paired_summary.csv", index=False)
+    paired_differences.to_csv(
+        args.output_dir / "paired_differences.csv", index=False
+    )
     repeat_frame.to_csv(args.output_dir / "repeat_measurements.csv", index=False)
     target_frame.to_csv(args.output_dir / "target_stability.csv", index=False)
     summary.to_csv(args.output_dir / "overall_summary.csv", index=False)
@@ -386,8 +475,10 @@ def main() -> None:
     plt.savefig(args.output_dir / "stability_comparison.png", dpi=180)
     plt.close()
 
-    print("\nOverall stability:")
+    print("\nOverall stability (each method on its own available targets):")
     print(summary.to_string(index=False))
+    print("\nPaired stability on neighborhoods where every method was available:")
+    print(paired_summary.to_string(index=False))
     print(f"\nResults written to {args.output_dir}")
 
 

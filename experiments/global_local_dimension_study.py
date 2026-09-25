@@ -478,6 +478,19 @@ def main() -> None:
         )
     )
     compact.to_csv(args.output_dir / "compact_summary.csv", index=False)
+    # Rows sharing a seed share one trained BB, so the target-level bootstrap
+    # above does not cover variation across data sets and retraining. Report
+    # seed-level means so that this variation is visible separately.
+    seed_summary = frame.groupby(
+        ["classes", "black_box", "seed", "neighborhood_fraction"], as_index=False
+    ).agg(
+        local_q95=("local_q95", "mean"),
+        random_q95=("random_q95", "mean"),
+        local_random_difference=("local_random_q95_difference", "mean"),
+        local_hard_class_count=("local_hard_class_count", "mean"),
+        local_participation_ratio=("local_participation_ratio", "mean"),
+    )
+    seed_summary.to_csv(args.output_dir / "seed_summary.csv", index=False)
     print("\nLocal versus global dimension summary:")
     print(compact.to_string(index=False))
     print(f"\nResults written to {args.output_dir}")
