@@ -42,6 +42,7 @@ BBの出力側を局所的に圧縮する。
 - `reports/pre_xai_dimension_report/`: XAI代理モデル学習前の局所出力次元実験を説明する
   Data appレポートのソース
 - `reports/pre_xai_dimension_report.html`: 上記レポートを単体で閲覧できるHTML
+- `docs/seminar/`: ゼミ発表用のスライド原稿（Markdown、1見出し=1スライド）
 - `references/`: 関連論文
 - `result/`: 再生成可能な実験結果（Git管理外）
 
