@@ -47,6 +47,8 @@ BBの出力側を局所的に圧縮する。
   Data appレポートのソース
 - `reports/pre_xai_dimension_report.html`: 上記レポートを単体で閲覧できるHTML
 - `docs/seminar/`: ゼミ発表用のスライド原稿（Markdown、1見出し=1スライド）
+- `docs/notes/`: 研究の方向性に関する議論メモ（`2026-10-03_why_compress.md`は、競合が少ない場合と
+  まとまって動く場合の区別、出力側を圧縮する意味の整理）
 - `references/`: 関連論文
 - `result/`: 再生成可能な実験結果（Git管理外）
 
