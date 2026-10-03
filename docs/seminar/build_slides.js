@@ -141,9 +141,9 @@ function axis2Color(v, r, c) {
 // Agenda slide shown at the start of each section; the current section is highlighted.
 const AGENDA = [
   ["導入", "今日の問い"],
-  ["問題と発想", "多クラスLIMEの問題、クラス側をまとめる発想、目標"],
+  ["問題と発想", "LIMEのおさらい、多クラスLIMEの問題、クラス側をまとめる発想、目標"],
   ["手法と仮定", "手順、上位2クラスとの違い、成り立つための仮定"],
-  ["実験", "仮定の確かめ方、実験の設定、結果"],
+  ["実験", "仮定の確かめ方、実験の設定、忠実さの測り方、結果"],
   ["課題と今後", "課題、今後の計画、まとめ"],
 ];
 function agenda(active) {
@@ -159,6 +159,40 @@ function agenda(active) {
     s.addText(desc, { isTextBox: true, x: 5.4, y, w: 7.1, h: 0.7, margin: 0, valign: "middle", fontSize: 16, color: on ? C.text2 : C.text1, transparency: on ? 0 : 75 });
   });
   return s;
+}
+
+
+// Superpixels on the 8x8 digit: A = left stem, B = upper right, C = lower right.
+function regionOf(r, c) { return c <= 2 ? "A" : r <= 3 ? "B" : "C"; }
+const REGION_TINT = { A: C.accent6, B: C.accent4, C: C.accent3 };
+function digitWithRegions(s, x, y, cell, hidden, mode, coef) {
+  DIGIT.forEach((row, r) => row.forEach((v, c) => {
+    const reg = regionOf(r, c);
+    const cx = x + c * cell, cy = y + r * cell;
+    let fill, strength;
+    if (mode === "heat") {
+      const k = coef[reg];
+      fill = k >= 0 ? C.accent1 : C.accent2;
+      strength = 0.15 + 0.75 * Math.min(1, Math.abs(k) / 0.3);
+    } else if (hidden.includes(reg)) {
+      fill = C.accent5; strength = 0.85;
+    } else if (mode === "regions") {
+      fill = REGION_TINT[reg]; strength = 0.22;
+    } else {
+      fill = C.background2; strength = 1;
+    }
+    s.addShape(pres.shapes.RECTANGLE, { x: cx, y: cy, w: cell, h: cell, fill: { color: fill, transparency: Math.round(100 - 100 * strength) }, line: { color: C.background1, width: 0.25 } });
+    if (!hidden.includes(reg) && v > 0.05) {
+      const m = cell * 0.18;
+      s.addShape(pres.shapes.RECTANGLE, { x: cx + m, y: cy + m, w: cell - 2 * m, h: cell - 2 * m, fill: { color: C.text1, transparency: Math.round(100 - 100 * v) }, line: { color: C.text1, transparency: 100 } });
+    }
+  }));
+  if (mode === "regions" || mode === "heat") {
+    [["A", 1, 3.5], ["B", 5, 1.5], ["C", 5, 5.6]].forEach(([l, cc, rr]) => {
+      s.addShape(pres.shapes.OVAL, { x: x + cc * cell, y: y + rr * cell, w: cell * 1.1, h: cell * 1.1, fill: { color: C.background1 }, line: { color: C.text1, width: 1 } });
+      s.addText(l, { isTextBox: true, x: x + cc * cell, y: y + rr * cell, w: cell * 1.1, h: cell * 1.1, margin: 0, align: "center", valign: "middle", fontSize: Math.max(9, Math.round(cell * 40)), bold: true, color: C.text1 });
+    });
+  }
 }
 
 // ---------- slides ----------
@@ -200,7 +234,57 @@ startSection("問題と発想");
 agenda(1);
 
 {
-  const s = newSlide("CONTENT", "多クラス分類でのLIMEのやり方", "LIMEは本来、出力1本を説明する手法です。多クラスでは出力が10本あるので、LIMEを10回回すのと同じことをしています。公式の実装では説明するクラスを指定でき、ふつうは予測されたクラス、この例では6だけを見ます。");
+  const s = newSlide("CONTENT", "LIMEのおさらい（1）摂動画像を作る", "まず、ふつうのLIMEが画像をどう説明するかを確認します。LIMEは、画像を意味のある小さな領域、スーパーピクセルに分けます。実際は数十個に分けますが、ここでは説明のために、左の縦線A、右上B、右下Cの3つにします。次に、領域をランダムに隠した画像を何枚も作り、それぞれをAIに入れて、説明したいクラスの確率を記録します。ここでは6の確率です。隠したときに確率が下がる領域は、6という判断に効いていることになります。");
+  const steps = [
+    ["画像をスーパーピクセルに分ける", "実際は数十個。ここではA・B・Cの3つ"],
+    ["領域をランダムに隠した画像を作る", "隠した領域は灰色"],
+    ["AIに入れて6の確率を記録する", "どの領域を残したか（1）、隠したか（0）と一緒に"],
+  ];
+  steps.forEach(([t, d], i) => {
+    const y = 1.45 + i * 1.0;
+    badge(s, 0.6, y, i + 1, C.text1, 0.45);
+    text(s, t, { x: 1.2, y: y - 0.03, w: 4.4, h: 0.45, fontSize: 16, bold: true });
+    text(s, d, { x: 1.2, y: y + 0.42, w: 4.4, h: 0.4, fontSize: 12, color: C.text2 });
+  });
+  digitWithRegions(s, 1.4, 4.45, 0.27, [], "regions");
+  text(s, "元画像とスーパーピクセル", { x: 0.9, y: 6.67, w: 3.2, h: 0.3, fontSize: 11, color: C.text2, align: "center" });
+  const pert = [[[], "元画像", "1", "1", "1", "0.50"], [["A"], "Aを隠す", "0", "1", "1", "0.20"], [["B"], "Bを隠す", "1", "0", "1", "0.80"], [["C"], "Cを隠す", "1", "1", "0", "0.40"]];
+  pert.forEach(([hid, name], i) => {
+    const x = 5.9 + i * 1.72;
+    digitWithRegions(s, x, 1.5, 0.18, hid, "plain");
+    text(s, name, { x: x - 0.1, y: 3.0, w: 1.65, h: 0.3, fontSize: 12, align: "center", color: C.text2 });
+  });
+  const hd = (t) => ({ text: t, options: { bold: true, color: C.background1, fill: { color: C.text1 }, align: "center" } });
+  const cl = (t, i, o) => ({ text: t, options: { align: "center", fill: { color: i % 2 ? C.background1 : C.background2 }, ...o } });
+  s.addTable([
+    [hd("摂動画像"), hd("A"), hd("B"), hd("C"), hd("6の確率")],
+    ...pert.map((r, i) => [cl(r[1], i), cl(r[2], i), cl(r[3], i), cl(r[4], i), cl(r[5], i, { bold: true, color: C.accent1 })]),
+  ], { x: 5.9, y: 3.55, w: 6.8, colW: [2.0, 1.0, 1.0, 1.0, 1.8], rowH: 0.48, fontSize: 15, color: C.text1, border: { type: "solid", pt: 1, color: "FFFFFF" }, valign: "middle" });
+  text(s, "1 = 残した、0 = 隠した（数値は説明のための例）", { x: 5.9, y: 6.05, w: 6.8, h: 0.3, fontSize: 11, color: C.text2 });
+}
+
+{
+  const s = newSlide("CONTENT", "LIMEのおさらい（2）線形回帰してヒートマップにする", "次に、記録した表を使って、6の確率を領域の有無で線形回帰します。係数は、その領域があると6の確率がどれだけ上がるかを表します。この例では、Aの係数が+0.30、Bが−0.30、Cが+0.10です。係数を領域の色にしたものがLIMEのヒートマップで、赤い領域は6の確率を上げ、青い領域は下げます。つまり「左の縦線があるから6、右上があると6らしさが下がる」と読めます。実際のLIMEでは、元画像に近い摂動画像ほど重みを大きくして回帰します。");
+  card(s, 0.6, 1.4, 6.3, 2.2, C.background2);
+  text(s, "線形回帰の結果", { x: 0.85, y: 1.55, w: 5.8, h: 0.35, fontSize: 13, color: C.text2 });
+  s.addText([
+    { text: "6の確率 ≈ 0.40＋" }, { text: "0.30A", options: { bold: true, color: C.accent1 } },
+    { text: "−" }, { text: "0.30B", options: { bold: true, color: C.accent2 } }, { text: "＋0.10C" },
+  ], { isTextBox: true, x: 0.85, y: 1.95, w: 5.95, h: 0.6, margin: 0, fontSize: 19, color: C.text1 });
+  text(s, "係数 ＝ その領域があると、6の確率がどれだけ上がるか", { x: 0.85, y: 2.75, w: 5.9, h: 0.6, fontSize: 14 });
+  const legend = [[C.accent1, "赤", "あると6の確率が上がる領域"], [C.accent2, "青", "あると6の確率が下がる領域"]];
+  legend.forEach(([col, n, d], i) => {
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.85, y: 4.0 + i * 0.7, w: 0.45, h: 0.45, rectRadius: 0.06, fill: { color: col }, line: { color: col } });
+    text(s, d, { x: 1.45, y: 4.0 + i * 0.7, w: 5.2, h: 0.45, fontSize: 16, valign: "middle" });
+  });
+  text(s, "読み方　左の縦線（A）があるから6。右上（B）があると6らしさが下がる", { x: 0.85, y: 5.55, w: 6.0, h: 0.8, fontSize: 15, bold: true, color: C.accent1 });
+  arrow(s, 7.15, 3.6, 0.5, 0.45, C.accent1);
+  digitWithRegions(s, 8.1, 1.55, 0.52, [], "heat", { A: 0.30, B: -0.30, C: 0.10 });
+  text(s, "6のヒートマップ（LIMEの出力）", { x: 8.1, y: 5.8, w: 4.2, h: 0.35, fontSize: 13, color: C.text2, align: "center" });
+}
+
+{
+  const s = newSlide("CONTENT", "多クラス分類でのLIMEのやり方", "いま見た手順で説明できるのは、6の確率という出力1本だけです。多クラスでは出力が10本あるので、同じ摂動画像を使って、クラスごとに10回回帰します。結果として、クラスごとのヒートマップが10枚できます。公式の実装では説明するクラスを指定でき、ふつうは予測されたクラス、この例では6だけを見ます。");
   const ys = 1.55, h = 2.1;
   const boxes = [
     ["摂動画像", "領域の隠し方を変えた画像を多数作る"],
@@ -228,10 +312,9 @@ agenda(1);
   for (let k = 0; k < 10; k++) grid(s, 0.6 + 4 * (bw + gap) + 0.15 + (k % 5) * 0.37, ys + 0.6 + Math.floor(k / 5) * 0.4, 0.085, m4, (v) => [k === 6 ? C.accent1 : C.accent5, v ? 0.7 : 0.15], 0.005);
 
   bullets(s, [
-    "LIMEは、出力1本を線形モデルで近似する手法",
-    "多クラスでは、クラスごとに別々のLIMEを当てる",
-    { sub: true, text: "画像をスーパーピクセルに分け、隠し方を変えた摂動画像を作る" },
-    { sub: true, text: "摂動画像ごとにAIの10クラス分の確率を得て、クラス0の確率、クラス1の確率、…をそれぞれ線形回帰する" },
+    "前の2枚の手順で説明できるのは、1つのクラス（6の確率）だけ",
+    "多クラスでは、同じ摂動画像を使って、クラスごとに別々に回帰する",
+    { sub: true, text: "0の確率、1の確率、…、9の確率をそれぞれ線形回帰する" },
     "結果として、クラスごとのヒートマップが10枚できる",
   ], { x: 0.6, y: 4.0, w: 7.6, h: 2.8 });
   card(s, 8.6, 4.15, 4.1, 1.6, C.background2);
@@ -519,6 +602,36 @@ agenda(3);
     ["忠実さの評価", "学習に使っていない摂動600点での決定係数 R²（全クラスの確率で計算）"],
   ], { x: 0.6, y: 2.65, w: 12.1, colW: [2.3, 9.8], rowH: 0.6, fontSize: 15 });
 }
+
+{
+  const s = newSlide("CONTENT", "忠実さの測り方　決定係数 R²", "忠実さは決定係数 R² で測ります。学習に使っていない摂動データを600点用意し、各点でAIの確率と説明の予測を比べます。10クラス分の差の2乗を足したものが、その点での説明のずれです。比べる基準として、いつも平均の確率を答えた場合のずれも計算します。R² は1から「説明のずれの合計 ÷ 平均で答えたときのずれの合計」を引いた値です。1に近いほど、説明がAIの振る舞いを再現できています。手書き数字の例では、平均で答えたときのずれを1とすると、通常のLIMEのずれは0.126、この手法の3本では0.132で、R² はそれぞれ0.874と0.868でした。");
+  const steps = [
+    ["学習に使っていない摂動データを用意する", "説明を作るのに使った点とは別の600点"],
+    ["各点で、AIの確率と説明の予測のずれを出す", "10クラス分の差の2乗を足す"],
+    ["基準として「いつも平均の確率を答える」場合のずれも出す", ""],
+    ["R² ＝ 1 − 説明のずれの合計 ÷ 平均で答えたときのずれの合計", "1に近いほど、AIの振る舞いを再現できている"],
+  ];
+  steps.forEach(([t, d], i) => {
+    const y = 1.45 + i * 1.2;
+    badge(s, 0.6, y, i + 1, i === 3 ? C.accent1 : C.text1, 0.45);
+    text(s, t, { x: 1.2, y: y - 0.03, w: 5.4, h: 0.5, fontSize: 15, bold: true });
+    if (d) text(s, d, { x: 1.2, y: y + (i === 3 ? 0.75 : 0.5), w: 5.4, h: 0.4, fontSize: 12, color: C.text2 });
+  });
+  card(s, 7.0, 1.4, 5.7, 5.35);
+  text(s, "ずれの合計（平均で答えたときを1とする）", { x: 7.25, y: 1.55, w: 5.2, h: 0.4, fontSize: 13, color: C.text2 });
+  const bars = [["平均で答える", 1.0, C.accent5, "1.000", ""], ["通常のLIME", 0.126, C.text1, "0.126", "R² = 0.874"], ["この手法（3本）", 0.132, C.accent1, "0.132", "R² = 0.868"]];
+  const bx = 9.0, bw = 2.7;
+  bars.forEach(([name, v, col, lab, r2v], i) => {
+    const y = 2.15 + i * 1.0;
+    text(s, name, { x: 7.25, y, w: 1.7, h: 0.5, fontSize: 13, valign: "middle" });
+    s.addShape(pres.shapes.RECTANGLE, { x: bx, y: y + 0.05, w: Math.max(0.04, bw * v), h: 0.4, fill: { color: col }, line: { color: col } });
+    text(s, lab, { x: bx + Math.max(0.04, bw * v) + 0.08, y, w: 0.9, h: 0.5, fontSize: 12, valign: "middle", color: C.text2 });
+    if (r2v) text(s, r2v, { x: bx + 1.15, y, w: 2.0, h: 0.5, fontSize: 15, bold: true, valign: "middle", color: col });
+  });
+  text(s, "手書き数字、MLP、半径0.15の平均", { x: 7.25, y: 5.15, w: 5.2, h: 0.3, fontSize: 11, color: C.text2 });
+  text(s, "R² ＝ 1 なら完全に再現、0 なら平均を答えるのと同じ", { x: 7.25, y: 5.6, w: 5.2, h: 0.9, fontSize: 15, bold: true });
+}
+
 
 {
   const s = newSlide("CONTENT", "結果1　局所的には少数の方向にしか動かない", "どのデータでも、近傍で確率が動くクラスは3個前後で、出力は2本前後の軸で表せました。26クラスの文字認識でも同じです。必要な軸の数は動くクラスの数より1つ前後少なく、2クラスが動くなら1本、3クラスなら2本という仮定1の説明とおおむね合います。つまり、低次元になる主な理由は、近傍で競合するクラスが少ないことです。ただ、手書き数字とyeastでは、軸の数がそれよりさらに少ない近傍が3〜4割ありました。これは、複数のクラスがまとまって動いていることを表しています。半径を0.4に広げると、文字認識では動くクラスが5個程度に増えます。SVMでも同じ傾向で、軸の数は平均1.4〜1.9本でした。");
