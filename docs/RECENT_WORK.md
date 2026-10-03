@@ -66,6 +66,9 @@
   動画プロンプトは、ボタンで進みスライダーで条件を変えるインタラクティブなHTMLを作らせる形に書き直し、
   `docs/seminar/interactive_animation_prompts.md`に改名（A　画像LIMEと多クラスLIME、B　仮定1の確かめ方、
   C　決定係数 R²）。
+  （4回目）ユーザーの参考画像をもとに、テーブルデータ版のLIME説明を付録E〜Gとして追加（特徴量空間の境界と
+  局所的な直線、クラスごとの直線と係数、クラスごとの上位3特徴）。図は`docs/seminar/make_tabular_figure.py`
+  （`tabular_*.png`、`tabular_coef.json`）。画像版と差し替えるかはユーザーが決める。
 - 結果スライドの数値のため`python3 experiments/unified_local_evaluation.py --neighborhoods data`を
   再実行した。数値は前回の記録と一致（MLP 3軸の追加R²損失 0.002〜0.020、RF 0.056〜0.133）。
 

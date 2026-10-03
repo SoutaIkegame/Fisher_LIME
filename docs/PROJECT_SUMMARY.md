@@ -47,7 +47,7 @@ BBの出力側を局所的に圧縮する。
   Data appレポートのソース
 - `reports/pre_xai_dimension_report.html`: 上記レポートを単体で閲覧できるHTML
 - `docs/seminar/`: ゼミ発表用のスライド原稿（Markdown、1見出し=1スライド）、PowerPoint版と
-  その生成スクリプト（`build_slides.js`、`make_slide_data.py`、`slide_data.json`、`make_region_figure.py`）、
+  その生成スクリプト（`build_slides.js`、`make_slide_data.py`、`slide_data.json`、`make_region_figure.py`、`make_tabular_figure.py`）、
   説明用インタラクティブアニメーションのプロンプト（`interactive_animation_prompts.md`）
 - `docs/notes/`: 研究の方向性に関する議論メモ（`2026-10-03_why_compress.md`は、競合が少ない場合と
   まとまって動く場合の区別、出力側を圧縮する意味の整理）

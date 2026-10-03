@@ -13,7 +13,10 @@ const pptxgen = require("pptxgenjs");
 
 const [dataPath, outPath, applyThemePath] = process.argv.slice(2);
 const DATA = JSON.parse(fs.readFileSync(dataPath, "utf8"));
-const REGION_FIGURE = require("path").join(require("path").dirname(dataPath), "region_figure.png");
+const SEMDIR = require("path").dirname(dataPath);
+const REGION_FIGURE = require("path").join(SEMDIR, "region_figure.png");
+const TAB = JSON.parse(fs.readFileSync(require("path").join(SEMDIR, "tabular_coef.json"), "utf8"));
+const tabImg = (n) => require("path").join(SEMDIR, `tabular_${n}.png`);
 const { applyTheme } = require(applyThemePath);
 
 const THEME = {
@@ -741,6 +744,76 @@ agenda(4);
 }
 
 startSection("付録");
+
+// ---------- tabular-data version of the LIME explanation ----------
+const TABCOL = { A: C.accent2, B: C.accent1, C: C.accent4 };
+function coefBar(s, x, y, w, name, v, col, maxAbs) {
+  const half = w / 2, len = half * Math.min(1, Math.abs(v) / maxAbs);
+  s.addShape(pres.shapes.RECTANGLE, { x: v >= 0 ? x + half : x + half - len, y, w: Math.max(0.03, len), h: 0.34, fill: { color: col }, line: { color: col } });
+  s.addText((v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2).replace(/^0/, "0"), { isTextBox: true, x: v >= 0 ? x + half + len + 0.05 : x + half - len - 0.75, y, w: 0.7, h: 0.34, margin: 0, fontSize: 12, valign: "middle", align: v >= 0 ? "left" : "right", color: C.text1 });
+  text(s, name, { x: x - 1.75, y, w: 0.8, h: 0.34, fontSize: 13, valign: "middle", align: "left" });
+}
+
+{
+  const s = newSlide("CONTENT", "付録E　テーブルデータ（1）局所的な直線を引く", "テーブルデータの場合は、データを特徴量空間の点として考えます。AIは、この空間に境界を引いてクラスを分けています。LIMEは、説明したい点（星）のまわりで、AIの確率を直線（特徴が多ければ平面）で近似します。その直線の傾き、つまり各特徴の係数が説明です。係数が正の特徴は、増やすとそのクラスの確率が上がります。");
+  s.addImage({ path: tabImg("space"), x: 0.6, y: 1.35, w: 5.6, h: 5.11 });
+  text(s, "（説明のためのイメージ）", { x: 0.6, y: 6.5, w: 5.6, h: 0.3, fontSize: 11, color: C.text2 });
+  card(s, 6.6, 1.5, 6.1, 5.2);
+  bullets(s, [
+    "データは、特徴量空間の点",
+    "AIは、空間に境界（灰色の線）を引いてクラスを分ける",
+    "LIMEは、説明したい点（★）のまわりで、AIの確率を直線で近似する",
+    "直線の傾き（各特徴の係数）が説明",
+    { sub: true, text: "係数が正なら、増やすとそのクラスの確率が上がる" },
+  ], { x: 6.9, y: 1.8, w: 5.6, h: 4.7, fontSize: 17, subSize: 15 });
+}
+
+{
+  const s = newSlide("CONTENT", "付録F　テーブルデータ（2）クラスごとに直線を引く", "多クラスでは、「クラスAかそれ以外か」「クラスBかそれ以外か」のように、クラスごとに別々の直線を引きます。直線ごとに係数が出るので、説明もクラスの数だけできます。この例では、特徴1を増やすとAの確率が上がり、Cの確率が下がります。特徴2を増やすとBの確率が下がります。");
+  const maxAbs = 0.6;
+  ["A", "B", "C"].forEach((k, i) => {
+    const y = 1.25 + i * 1.82;
+    s.addImage({ path: tabImg(`ovr_${k}`), x: 0.9, y, w: 1.88, h: 1.7 });
+    arrow(s, 3.25, y + 0.66, 0.9, 0.45, C.accent2);
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 4.5, y: y + 0.12, w: 8.2, h: 1.55, rectRadius: 0.08, fill: { color: C.background1 }, line: { color: TABCOL[k], width: 2 } });
+    text(s, `クラス${k}以外`, { x: 4.75, y: y + 0.12, w: 1.4, h: 1.55, fontSize: 14, valign: "middle", color: C.text2 });
+    text(s, `クラス${k}`, { x: 11.25, y: y + 0.12, w: 1.3, h: 1.55, fontSize: 18, bold: true, valign: "middle", color: TABCOL[k] });
+    s.addShape(pres.shapes.LINE, { x: 8.9, y: y + 0.3, w: 0, h: 1.2, line: { color: C.accent5, width: 1, dashType: "dash" } });
+    const [c1, c2] = TAB.display[k];
+    coefBar(s, 7.9, y + 0.4, 2.0, "特徴1", c1, TABCOL[k], maxAbs);
+    coefBar(s, 7.9, y + 0.95, 2.0, "特徴2", c2, TABCOL[k], maxAbs);
+  });
+  text(s, "（説明のためのイメージ。係数は図の境界から計算した値）", { x: 0.6, y: 6.68, w: 8, h: 0.3, fontSize: 10, color: C.text2 });
+}
+
+{
+  const s = newSlide("CONTENT", "付録G　テーブルデータ（3）クラスごとの説明を並べる", "クラスごとの説明を並べると、こうなります。読みやすくするために係数の大きい特徴を3つずつ選ぶと、クラスごとに選ばれる特徴が違います。また、特徴1はクラスAでは+0.4、クラスBでは−0.5です。つまり特徴1は、BからAへ確率を移す特徴ですが、それは2つの説明を見比べて初めて分かります。この研究は、この「BからAへ」を1本の軸として直接説明することを目指しています。");
+  const cols = [
+    ["A", [["特徴1", 0.4, true], ["特徴2", -0.6, false], ["特徴5", 0.3, false]]],
+    ["B", [["特徴2", 0.3, false], ["特徴4", -0.5, false], ["特徴1", -0.5, true]]],
+    ["C", [["特徴3", -0.6, false], ["特徴5", 0.7, false], ["特徴2", -0.6, false]]],
+  ];
+  cols.forEach(([k, rows], i) => {
+    const x = 0.6 + i * 4.15;
+    text(s, `クラス${k}`, { x, y: 1.35, w: 3.8, h: 0.5, fontSize: 22, bold: true, color: TABCOL[k] });
+    s.addShape(pres.shapes.LINE, { x, y: 1.95, w: 3.8, h: 0, line: { color: C.accent5, width: 0.75 } });
+    s.addShape(pres.shapes.LINE, { x: x + 2.35, y: 2.2, w: 0, h: 2.9, line: { color: C.accent5, width: 0.75, dashType: "dash" } });
+    rows.forEach(([f, v, hl], j) => {
+      const y = 2.3 + j * 0.95;
+      if (hl) s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: x - 0.1, y: y - 0.2, w: 4.0, h: 0.8, rectRadius: 0.1, fill: { color: "D6E6F2" }, line: { color: C.accent2, width: 1 } });
+      text(s, f, { x, y, w: 1.0, h: 0.4, fontSize: 15, bold: true, valign: "middle" });
+      const len = 1.25 * Math.abs(v) / 0.7;
+      s.addShape(pres.shapes.RECTANGLE, { x: v >= 0 ? x + 2.35 : x + 2.35 - len, y: y + 0.03, w: len, h: 0.34, fill: { color: TABCOL[k] }, line: { color: TABCOL[k] } });
+      s.addText((v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1), { isTextBox: true, x: v >= 0 ? x + 2.35 : x + 2.35 - len, y: y + 0.03, w: len, h: 0.34, margin: 0, align: "center", valign: "middle", fontSize: 12, bold: true, color: C.background1 });
+    });
+  });
+  card(s, 0.6, 5.35, 12.1, 1.4, C.background2);
+  bullets(s, [
+    "クラスごとに選ばれる特徴が違い、そのままでは比べにくい",
+    "特徴1はAを上げ（+0.4）Bを下げる（−0.5）。BからAへ確率を移す特徴だが、見比べないと分からない",
+  ], { x: 0.85, y: 5.5, w: 11.6, h: 1.2, fontSize: 15 });
+  text(s, "（数値は説明のための例）", { x: 0.6, y: 6.85, w: 6, h: 0.25, fontSize: 10, color: C.text2 });
+}
 
 {
   const s = newSlide("CONTENT", "付録A　記号と用語", "");
