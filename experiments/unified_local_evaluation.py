@@ -47,6 +47,7 @@ from fisher_lime.diagnostics import (
     NeighborhoodSampler,
     class_activity,
     coefficient_matrix_dimension,
+    deviation_from_reference,
     linear_energy_in_subspace,
     participation_ratio,
     weighted_feature_covariance,
@@ -223,6 +224,9 @@ def evaluate_configuration(
 
                     analysis = analyze_local_probabilities(fit_p, fit_w)
                     activity = class_activity(fit_p, fit_w, args.activity_threshold)
+                    deviation = deviation_from_reference(
+                        fit_p, fit_w, target_probability
+                    )
                     ordinary = fit_weighted_ridge(fit_f, fit_p, fit_w, args.ridge_alpha)
                     feature_covariance = weighted_feature_covariance(fit_f, fit_w)
                     linear = coefficient_matrix_dimension(
@@ -260,6 +264,9 @@ def evaluate_configuration(
                             "output_participation_ratio": participation_ratio(
                                 analysis.explained_variance_ratio
                             ),
+                            "moving_classes_from_target": deviation.moving_classes,
+                            "axes_from_target_q95": deviation.effective_dimension_95,
+                            "deviation_energy": deviation.deviation_energy,
                             "argmax_classes": activity.argmax_classes,
                             "active_classes": activity.active_classes,
                             "moving_classes": activity.moving_classes,
@@ -401,6 +408,9 @@ def summarize_mechanism(neighborhoods: pd.DataFrame) -> pd.DataFrame:
         q95_below_active=frame["output_q95"] < frame["active_classes"] - 1,
         q95_below_moving=frame["output_q95"] < frame["moving_classes"] - 1,
         linear_below_output=frame["linear_q95"] < frame["output_q95"],
+        target_moving_minus_one=frame["moving_classes_from_target"] - 1,
+        target_axes_below_moving=frame["axes_from_target_q95"]
+        < frame["moving_classes_from_target"] - 1,
     )
     return (
         frame.groupby(
@@ -424,6 +434,9 @@ def summarize_mechanism(neighborhoods: pd.DataFrame) -> pd.DataFrame:
             share_q95_below_moving=("q95_below_moving", "mean"),
             share_linear_below_output=("linear_below_output", "mean"),
             mean_ordinary_r2=("ordinary_r2", "mean"),
+            mean_moving_classes_from_target=("moving_classes_from_target", "mean"),
+            mean_axes_from_target_q95=("axes_from_target_q95", "mean"),
+            share_target_axes_below_moving=("target_axes_below_moving", "mean"),
         )
     )
 

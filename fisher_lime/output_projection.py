@@ -215,3 +215,40 @@ def axis_complexity(directions: np.ndarray) -> dict[str, float]:
         "top2_class_mass": float(np.mean(top_two)),
         "active_classes_5pct": float(np.mean(active)),
     }
+
+
+def class_contrast_projection(
+    probabilities: np.ndarray,
+    weights: np.ndarray,
+    classes: np.ndarray,
+) -> LinearOutputProjection:
+    """Project onto the contrasts among a chosen set of classes.
+
+    With classes ``(c1, c2)`` the single direction is (e_c1 - e_c2)/sqrt(2),
+    so the surrogate explains p_c1 - p_c2, i.e. an "X1 vs X2" LIME. With m
+    classes the m - 1 orthonormal directions span every contrast among them,
+    which is the same subspace as explaining those m classes jointly under
+    the sum-to-one constraint. The center is the weighted probability mean,
+    as for weighted PCA, so only the choice of directions differs.
+    """
+
+    probabilities, weights = _validate_probabilities_and_weights(
+        probabilities, weights
+    )
+    classes = np.asarray(classes, dtype=int)
+    if classes.ndim != 1 or classes.size < 2:
+        raise ValueError("at least two classes are required")
+    if np.unique(classes).size != classes.size:
+        raise ValueError("classes must be distinct")
+    if classes.min() < 0 or classes.max() >= probabilities.shape[1]:
+        raise ValueError("class index out of range")
+
+    normalized = weights / weights.sum()
+    mean = np.sum(normalized[:, None] * probabilities, axis=0)
+    contrasts = np.zeros((probabilities.shape[1], classes.size - 1))
+    contrasts[classes[0]] = 1.0
+    contrasts[classes[1:], np.arange(classes.size - 1)] = -1.0
+    directions, triangular = np.linalg.qr(contrasts)
+    # Fix QR's sign ambiguity so the first axis is +c1 / -c2.
+    directions = directions * np.sign(np.diag(triangular))
+    return LinearOutputProjection(mean=mean, directions=directions)

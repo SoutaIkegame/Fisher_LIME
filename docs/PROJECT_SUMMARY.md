@@ -21,12 +21,16 @@ BBの出力側を局所的に圧縮する。
 
 - `fisher_lime/local_dimension.py`: 重み付きPCAと局所出力次元の測定
 - `fisher_lime/fisher_projection.py`: hard/soft Fisher射影と確率空間への復元
+- `fisher_lime/output_projection.py`: 回転PCA、Sparse PCA、クラス対比射影
+  （`class_contrast_projection`）
 - `fisher_lime/surrogate.py`: 重み付き多出力Ridge代理モデルと忠実性指標
 - `fisher_lime/diagnostics.py`: 競合クラス数、LIME係数行列の有効ランク、
   isotropic／データ共分散Gaussian近傍の生成とデータspan外成分の測定
 - `experiments/unified_local_evaluation.py`: 同一BB・同一対象・同一近傍分布で、
   局所次元・競合クラス数・係数行列ランク・圧縮のみ／通常LIME／PCA-LIMEの
   held-out忠実性を対象ごとに記録する主実験
+- `experiments/topclass_vs_pca_study.py`: 実データ（PMLBミラーとdigits）で、上位クラス対比
+  （X1 vs X2）・最も動くクラスの対比・PCAを同じ近傍と代理モデルで比較する
 - `experiments/run_local_dimension.py`: 合成データによる局所低次元性の初期実験
 - `experiments/global_local_dimension_study.py`: 評価データ上の大域・局所次元と
   同数ランダム対照の比較（補助実験。最近傍集合はLIME近傍より広く、次元は近傍内の
@@ -38,10 +42,15 @@ BBの出力側を局所的に圧縮する。
 - `experiments/generalization_study.py`: データ・BB・seedを広げた忠実性比較
 - `experiments/stability_study.py`: 摂動反復による説明安定性比較
 - `experiments/fisher_regularization_study.py`: Fisher散布行列の正則化感度
-- `tests/test_local_dimension.py`: 数値計算の単体テスト
+- `tests/`: 数値計算の単体テスト（`test_output_projection.py`はクラス対比射影）
 - `reports/pre_xai_dimension_report/`: XAI代理モデル学習前の局所出力次元実験を説明する
   Data appレポートのソース
 - `reports/pre_xai_dimension_report.html`: 上記レポートを単体で閲覧できるHTML
+- `docs/seminar/`: ゼミ発表用のスライド原稿（Markdown、1見出し=1スライド）、PowerPoint版と
+  その生成スクリプト（`build_slides.js`、`make_slide_data.py`、`slide_data.json`、`make_region_figure.py`、`make_tabular_figure.py`）、
+  説明用インタラクティブアニメーションのプロンプト（`interactive_animation_prompts.md`）
+- `docs/notes/`: 研究の方向性に関する議論メモ（`2026-10-03_why_compress.md`は、競合が少ない場合と
+  まとまって動く場合の区別、出力側を圧縮する意味の整理）
 - `references/`: 関連論文
 - `result/`: 再生成可能な実験結果（Git管理外）
 
@@ -77,6 +86,13 @@ BBの出力側を局所的に圧縮する。
 - 出力がほぼ一定の近傍（総分散1e-4未満）は圧縮が自明に成功するため別集計する。
 - 同じseedの行は同じBBを共有するため、信頼区間はseed→対象の階層bootstrapで求め、
   seed別結果も出す。3 seedでは探索的な区間として扱う。
+- 「上位2クラスのLIME（X1 vs X2）で十分ではないか」に答えるため、PCAの比較対象として
+  クラス対比射影を使う。中心（重み付き平均）・摂動・Ridgeを揃え、軸の向きだけを変える。
+  上位クラス（説明点の確率順）と最も動くクラス（近傍の分散順）を分け、「どのクラスか」と
+  「クラス間のどの方向か」を切り分ける。
+- 実データはこの環境ではOpenML・UCIに接続できないため、PMLBのGitHubミラー
+  （media.githubusercontent.com）から取得し、`result/data_cache/`にキャッシュする。
+  サンプル数10未満のクラスは層化分割のため除外する（yeastの1クラス、wine qualityの9点）。
 - 手法間の安定性比較は、全手法が利用可能だった近傍に限定した対応のある比較を主とする。
 
 ## 実行方法
@@ -84,6 +100,7 @@ BBの出力側を局所的に圧縮する。
 ```bash
 python3 experiments/run_local_dimension.py
 python3 experiments/unified_local_evaluation.py
+python3 experiments/topclass_vs_pca_study.py
 python experiments/global_local_dimension_study.py
 python3 experiments/compare_pca_lime.py
 python experiments/pca_fidelity_tradeoff_study.py

@@ -110,6 +110,26 @@ python3 experiments/unified_local_evaluation.py
 - `fidelity_by_seed.csv`: 同じ集計のseed別結果
 - `fidelity_by_dimension.png`: 軸数ごとのheld-out R²
 
+## 上位クラス対比（X1 vs X2）とPCA圧縮の比較（実データ）
+
+予測確率が上位のクラス同士の対比（q=1なら p_X1 − p_X2 を説明するLIME）と、
+近傍で最も動くクラス同士の対比、近傍出力の重み付きPCAを、同じ中心・同じ摂動・
+同じRidge代理モデルで比べます。データはPMLBのGitHubミラー（letter、yeast、
+wine_quality_white など）とsklearnのdigits、BBは既定でMLPとRBF-SVMです。
+
+```bash
+python3 experiments/topclass_vs_pca_study.py
+```
+
+結果は `result/topclass_vs_pca/` に、データのキャッシュは `result/data_cache/` に生成されます。
+
+- `neighborhoods.csv`: 近傍ごとの動くクラス数、q95、上位2クラスと最も動く2クラスの一致など
+- `method_evaluations.csv`: 近傍×軸数×手法ごとの圧縮のみ／代理モデル込みのheld-out R²
+- `method_summary.csv`: 手法・軸数ごとの集計
+- `paired_differences.csv`: PCA − 対比手法の対応のある差（margin別、動くクラス数別、
+  上位2クラスが動く2クラスと一致したか別。seed→対象の階層bootstrap）
+- `surrogate_r2_by_method.png`: 軸数ごとのheld-out R²
+
 ## PCA圧縮LIMEと通常LIMEの比較
 
 学習用とは別の摂動点を使い、通常の多出力局所線形回帰と、PCAで出力を

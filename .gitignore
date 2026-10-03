@@ -14,3 +14,6 @@ result/fisher_regularization/
 result/global_local_dimension/
 result/pca_fidelity_tradeoff/
 result/pca_rotation_sparse_pca/
+result/unified_local_evaluation/
+result/topclass_vs_pca/
+result/data_cache/
