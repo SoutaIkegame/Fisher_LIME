@@ -44,6 +44,14 @@
   （`neighborhoods.csv`に`moving_classes_from_target`など）。MLP半径0.15の動くクラス／軸は、
   digits 3.04／1.71、letter 2.85／1.90、yeast 3.88／2.17、wine 2.81／1.68。軸 < 動くクラス−1 の
   近傍はdigits 32%、yeast 45%。PCA 3軸で失うR²は0.001〜0.017（MLP）、0.001〜0.015（SVM）。
+- PowerPoint版を作成。`docs/seminar/build_slides.js`（pptxgenjs）が`docs/seminar/slide_data.json`
+  （`make_slide_data.py`で生成。手書き数字の実画像と、説明点1つのクラスごとのずれの割合）から生成する。
+  再生成は `NODE_PATH=<pptxgenjsのnode_modules> node docs/seminar/build_slides.js
+  docs/seminar/slide_data.json docs/seminar/2026-10-05_seminar.pptx <pptxスキル>/scripts/apply_theme.js`。
+  スライドの数値は原稿と同じ。11枚目（確かめ方）と12枚目（設定）は原稿でも分割し、以降を繰り下げた。
+  pptxスキルの検証スクリプトは全項目合格。LibreOfficeで画像化して全21枚の文字のはみ出しと重なりを確認した
+  （この環境ではlibreoffice-impressを追加インストールして変換した）。フォントは游ゴシック指定で、
+  QAではIPAゴシック等で代替表示しているため、実機では行の折り返し位置が少し変わる可能性がある。
 - 結果スライドの数値のため`python3 experiments/unified_local_evaluation.py --neighborhoods data`を
   再実行した。数値は前回の記録と一致（MLP 3軸の追加R²損失 0.002〜0.020、RF 0.056〜0.133）。
 
@@ -77,7 +85,8 @@
 
 ### 未完了・次の作業
 
-1. スライド原稿をユーザーと確認し、図（`[図]`の指示）を作り、スライド形式に変換する。
+1. PowerPoint版 `docs/seminar/2026-10-05_seminar.pptx`（本編17枚＋付録4枚、話すことはノート）を作成済み。
+   ユーザーに確認してもらい、表紙の「発表者名」を本人の名前に直す。再生成手順は下記。
    発表の構成は変えない（ユーザー判断）。手法の強みは「競合は多いがまとまって動く」場合にあり、
    今の実験はほぼ「競合が少ない」場合だった点は`docs/notes/2026-10-03_why_compress.md`に記録。
    発表後に主張の組み立て直しと、CIFAR-100など群構造のあるデータでの検証を検討する。

@@ -1,0 +1,633 @@
+// Build the 10/05 seminar deck from docs/seminar/2026-10-05_slides.md.
+//
+//   NODE_PATH=<dir with pptxgenjs>/node_modules node docs/seminar/build_slides.js \
+//     docs/seminar/slide_data.json docs/seminar/2026-10-05_seminar.pptx <pptx skill>/scripts/apply_theme.js
+//
+// slide_data.json (written by make_slide_data.py) holds the real digits image and the
+// per-class deviation shares of one digits explanation point.
+// Numbers on result slides come from result/topclass_vs_pca (real data) and
+// result/unified_local_evaluation (synthetic, appendix D), run on 2026-10-03.
+
+const fs = require("fs");
+const pptxgen = require("pptxgenjs");
+
+const [dataPath, outPath, applyThemePath] = process.argv.slice(2);
+const DATA = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+const { applyTheme } = require(applyThemePath);
+
+const THEME = {
+  name: "Fisher-LIME Seminar",
+  headFontFace: "Yu Gothic",
+  bodyFontFace: "Yu Gothic",
+  colors: {
+    dk1: "1D2433", lt1: "FFFFFF", dk2: "4A5568", lt2: "EEF1F5",
+    accent1: "D9532B", accent2: "2F78A8", accent3: "E3A21A",
+    accent4: "3A9D7A", accent5: "9AA3B2", accent6: "6B4FA0",
+    hlink: "2F78A8", folHlink: "6B4FA0",
+  },
+};
+const HEX = THEME.colors;
+
+const pres = new pptxgen();
+pres.layout = "LAYOUT_WIDE"; // 13.333 x 7.5 in
+pres.theme = { headFontFace: THEME.headFontFace, bodyFontFace: THEME.bodyFontFace };
+pres.title = "多クラス分類器の局所説明を「クラス間の確率の移動」としてまとめる";
+const C = pres.SchemeColor;
+const W = 13.333;
+
+// Class colors used across the deck: 0 = blue, 6 = vermilion, 9 = amber.
+const CLS = { 0: C.accent2, 6: C.accent1, 9: C.accent3 };
+
+// ---------- layouts ----------
+pres.defineSlideMaster({
+  title: "TITLE",
+  objects: [
+    { rect: { x: 0, y: 0, w: W, h: 7.5, fill: { color: C.text1 } } },
+    { placeholder: { options: { name: "title", type: "title", x: 0.8, y: 1.9, w: 11.7, h: 1.8, fontSize: 36, bold: true, color: C.background1, valign: "bottom", align: "left" }, text: "" } },
+    { placeholder: { options: { name: "body", type: "body", x: 0.8, y: 3.9, w: 11.7, h: 0.7, fontSize: 20, color: C.accent5, align: "left" }, text: "" } },
+  ],
+});
+pres.defineSlideMaster({
+  title: "CONTENT",
+  objects: [
+    { rect: { x: 0, y: 0, w: W, h: 7.5, fill: { color: C.background1 } } },
+    { placeholder: { options: { name: "title", type: "title", x: 0.6, y: 0.3, w: 12.1, h: 0.8, fontSize: 30, bold: true, color: C.text1, valign: "middle", align: "left", margin: 0 }, text: "" } },
+    { text: { text: "多クラスLIMEの出力側の次元削減　2026-10-05", options: { x: 0.6, y: 7.02, w: 8, h: 0.3, fontSize: 10, color: C.accent5, margin: 0 } } },
+  ],
+  slideNumber: { x: 12.1, y: 7.02, w: 0.6, h: 0.3, fontSize: 10, color: C.accent5, align: "right" },
+});
+pres.defineSlideMaster({
+  title: "CLOSING",
+  objects: [
+    { rect: { x: 0, y: 0, w: W, h: 7.5, fill: { color: C.text1 } } },
+    { placeholder: { options: { name: "title", type: "title", x: 0.6, y: 0.3, w: 12.1, h: 0.8, fontSize: 30, bold: true, color: C.background1, valign: "middle", align: "left", margin: 0 }, text: "" } },
+  ],
+  slideNumber: { x: 12.1, y: 7.02, w: 0.6, h: 0.3, fontSize: 10, color: C.accent5, align: "right" },
+});
+
+// ---------- helpers ----------
+let section = "";
+function newSlide(master, title, notes) {
+  const s = pres.addSlide({ masterName: master, sectionTitle: section });
+  if (title) s.addText(title, { placeholder: "title" });
+  if (notes) s.addNotes(notes);
+  return s;
+}
+function startSection(title) { section = title; pres.addSection({ title }); }
+
+function text(s, t, o) { s.addText(t, { isTextBox: true, margin: 0, fontSize: 16, color: C.text1, valign: "top", ...o }); }
+function card(s, x, y, w, h, fill) {
+  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w, h, rectRadius: 0.12, fill: { color: fill || C.background2 }, line: { color: fill || C.background2 } });
+}
+function badge(s, x, y, label, fill, size) {
+  const d = size || 0.5;
+  s.addShape(pres.shapes.OVAL, { x, y, w: d, h: d, fill: { color: fill || C.text1 }, line: { color: fill || C.text1 } });
+  s.addText(String(label), { isTextBox: true, x, y, w: d, h: d, margin: 0, align: "center", valign: "middle", fontSize: Math.round(d * 32), bold: true, color: C.background1 });
+}
+// Class chip: the deck's motif (a rounded square holding a class label).
+function chip(s, x, y, label, fill, size) {
+  const d = size || 0.42;
+  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y, w: d, h: d, rectRadius: 0.06, fill: { color: fill }, line: { color: fill } });
+  s.addText(String(label), { isTextBox: true, x, y, w: d, h: d, margin: 0, align: "center", valign: "middle", fontSize: Math.round(d * 34), bold: true, color: C.background1 });
+}
+function bullets(s, items, o) {
+  const runs = items.map((it, i) => {
+    const sub = typeof it === "object" && it.sub;
+    const t = sub ? it.text : it;
+    return { text: t, options: { bullet: sub ? { indent: 18 } : true, indentLevel: sub ? 1 : 0, breakLine: i < items.length - 1, fontSize: sub ? (o && o.subSize) || 14 : (o && o.fontSize) || 16, color: sub ? C.text2 : C.text1, paraSpaceAfter: 6 } };
+  });
+  s.addText(runs, { isTextBox: true, margin: 0, valign: "top", ...o, fontSize: undefined });
+}
+// Grid of cells; value in [0,1] mapped to transparency of the given color.
+function grid(s, x, y, cell, matrix, colorOf, gap) {
+  const g = gap === undefined ? 0.02 : gap;
+  matrix.forEach((row, r) => row.forEach((v, c) => {
+    const [color, strength] = colorOf(v, r, c);
+    s.addShape(pres.shapes.RECTANGLE, { x: x + c * cell, y: y + r * cell, w: cell - g, h: cell - g, fill: { color, transparency: Math.round(100 - 100 * Math.max(0, Math.min(1, strength))) }, line: { color: C.background1, width: 0.5 } });
+  }));
+}
+function arrow(s, x, y, w, h, fill) {
+  s.addShape(pres.shapes.RIGHT_ARROW, { x, y, w, h, fill: { color: fill || C.accent5 }, line: { color: fill || C.accent5 } });
+}
+const chartText = { catAxisLabelFontFace: "+mn-lt", valAxisLabelFontFace: "+mn-lt", legendFontFace: "+mn-lt", titleFontFace: "+mn-lt", dataLabelFontFace: "+mn-lt", catAxisLabelColor: HEX.dk2, valAxisLabelColor: HEX.dk2, catAxisLabelFontSize: 12, valAxisLabelFontSize: 11, legendFontSize: 12, dataLabelFontSize: 11, dataLabelColor: HEX.dk1, titleFontSize: 13, titleColor: HEX.dk1 };
+function chartFrame() { return { valGridLine: { color: "DDE2EA", size: 0.75 }, catGridLine: { style: "none" }, valAxisLineShow: false }; }
+function tableRows(header, rows, opts) {
+  const o = opts || {};
+  const head = header.map((h) => ({ text: h, options: { bold: true, color: C.background1, fill: { color: C.text1 }, align: "left" } }));
+  const body = rows.map((r, i) => r.map((v) => (typeof v === "object" ? v : { text: String(v), options: { fill: { color: i % 2 ? C.background1 : C.background2 } } })));
+  return [head, ...body];
+}
+function table(s, header, rows, o) {
+  s.addTable(tableRows(header, rows), { fontSize: 14, color: C.text1, border: { type: "solid", pt: 0.75, color: "FFFFFF" }, valign: "middle", margin: [3, 6, 3, 6], ...o });
+}
+
+// Digit image (8x8, values 0..1) from data.json.
+const DIGIT = DATA.digit_image;
+// Illustrative axis-1 heatmap built on the digit's strokes: left stem -> toward 6 (red), top-right -> toward 0 (blue).
+function axis1Color(v, r, c) {
+  if (v < 0.15) return [C.background2, 1];
+  if (c <= 3 && r >= 1) return [C.accent1, 0.25 + 0.75 * v];
+  if (r <= 2 && c >= 4) return [C.accent2, 0.3 + 0.7 * v];
+  return [C.accent1, 0.2 * v];
+}
+function axis2Color(v, r, c) {
+  if (v < 0.15) return [C.background2, 1];
+  if (r >= 5 && c >= 4) return [C.accent3, 0.3 + 0.7 * v];
+  return [C.accent5, 0.15 * v];
+}
+
+// ---------- slides ----------
+startSection("導入");
+
+{
+  const s = newSlide("TITLE", null, "今回は、研究テーマを初めて紹介します。多クラス分類器をLIMEで説明するときの問題と、それに対する考え方、ここまでの実験結果を話します。手法はまだ完成していないので、前提となる仮定が成り立つかを確かめた結果が中心です。");
+  s.addText("多クラス分類器の局所説明を\n「クラス間の確率の移動」としてまとめる", { placeholder: "title" });
+  s.addText("LIMEの出力側を次元削減する手法の検討", { placeholder: "body" });
+  text(s, "発表者名　／　2026-10-05", { x: 0.8, y: 5.1, w: 8, h: 0.4, fontSize: 16, color: C.background1 });
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].forEach((k, i) => chip(s, 0.8 + i * 0.55, 6.2, k, CLS[k] || C.text2, 0.42));
+}
+
+{
+  const s = newSlide("CONTENT", "今日の問い", "この発表では、数字認識の例を最初から最後まで使います。このAIは6と答えましたが、0の確率も0.4あり、迷っています。知りたいのは、画像のどこが0ではなく6という判断につながったかです。この問いに答えるのが、今日の目標です。\n\n（左の画像は手書き数字データの実際の画像。右の確率は説明のための例。）");
+  text(s, "手書き数字を0〜9に分類するAIが、ある画像に次の確率を出した", { x: 0.6, y: 1.3, w: 12, h: 0.4, fontSize: 18, color: C.text2 });
+  grid(s, 0.9, 2.0, 0.42, DIGIT, (v) => [C.text1, v], 0.03);
+  text(s, "入力画像（手書き数字、8×8画素）", { x: 0.9, y: 5.45, w: 3.6, h: 0.3, fontSize: 12, color: C.text2 });
+  const probs = [0.4, 0.007, 0.007, 0.007, 0.007, 0.007, 0.5, 0.008, 0.007, 0.05];
+  s.addChart(pres.charts.BAR, [{ name: "確率", labels: probs.map((_, k) => String(k)), values: probs }], {
+    x: 5.0, y: 1.85, w: 7.7, h: 3.7, barDir: "col", barGapWidthPct: 40,
+    chartColors: probs.map((_, k) => (k === 6 ? HEX.accent1 : k === 0 ? HEX.accent2 : k === 9 ? HEX.accent3 : HEX.accent5)),
+    showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.00", valAxisMaxVal: 0.6, valAxisMinVal: 0, valAxisLabelFormatCode: "0.0",
+    showLegend: false, showTitle: true, title: "AIの出力（各数字の確率、例）", catAxisTitle: "数字", ...chartText, ...chartFrame(),
+  });
+  card(s, 0.6, 5.95, 12.1, 0.85, C.background2);
+  s.addText([
+    { text: "予測は6。では、なぜ", options: { color: C.text1 } },
+    { text: "0", options: { color: C.accent2, bold: true } },
+    { text: "ではなく", options: { color: C.text1 } },
+    { text: "6", options: { color: C.accent1, bold: true } },
+    { text: "なのか", options: { color: C.text1 } },
+  ], { isTextBox: true, x: 0.9, y: 5.95, w: 11.5, h: 0.85, margin: 0, fontSize: 26, bold: true, valign: "middle" });
+}
+
+startSection("問題と発想");
+
+{
+  const s = newSlide("CONTENT", "多クラス分類でのLIMEのやり方", "LIMEは本来、出力1本を説明する手法です。多クラスでは出力が10本あるので、LIMEを10回回すのと同じことをしています。公式の実装では説明するクラスを指定でき、ふつうは予測されたクラス、この例では6だけを見ます。");
+  const ys = 1.55, h = 2.1;
+  const boxes = [
+    ["摂動画像", "領域の隠し方を変えた画像を多数作る"],
+    ["AI", "それぞれを分類する"],
+    ["10クラスの確率", "1枚ごとに10個の数"],
+    ["10個の線形モデル", "クラスごとに別々に回帰"],
+    ["ヒートマップ10枚", "クラスごとの説明"],
+  ];
+  const bw = 2.05, gap = 0.46;
+  boxes.forEach(([t, d], i) => {
+    const x = 0.6 + i * (bw + gap);
+    card(s, x, ys, bw, h, i === 4 ? "FBE6DF" : C.background2);
+    text(s, t, { x: x + 0.15, y: ys + 0.15, w: bw - 0.3, h: 0.45, fontSize: 14, bold: true });
+    text(s, d, { x: x + 0.15, y: ys + 1.45, w: bw - 0.3, h: 0.6, fontSize: 12, color: C.text2 });
+    if (i < 4) arrow(s, x + bw + 0.08, ys + h / 2 - 0.15, 0.3, 0.3);
+  });
+  // tiny visuals inside boxes
+  const m4 = [[1, 0, 1, 1], [1, 1, 0, 1], [0, 1, 1, 1], [1, 1, 1, 0]];
+  [0, 1, 2].forEach((k) => grid(s, 0.8 + k * 0.6, ys + 0.75, 0.12, m4, (v) => [C.text2, v ? (k === 1 ? 0.15 : 0.7) : (k === 1 ? 0.7 : 0.15)], 0.01));
+  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 0.6 + (bw + gap) + 0.55, y: ys + 0.7, w: 0.95, h: 0.6, rectRadius: 0.08, fill: { color: C.text1 }, line: { color: C.text1 } });
+  text(s, "AI", { x: 0.6 + (bw + gap) + 0.55, y: ys + 0.7, w: 0.95, h: 0.6, fontSize: 16, bold: true, color: C.background1, align: "center", valign: "middle" });
+  const pv = [0.4, 0.05, 0.05, 0.05, 0.05, 0.05, 0.5, 0.05, 0.05, 0.1];
+  pv.forEach((v, k) => s.addShape(pres.shapes.RECTANGLE, { x: 0.6 + 2 * (bw + gap) + 0.2 + k * 0.16, y: ys + 1.3 - v * 1.1, w: 0.12, h: v * 1.1, fill: { color: k === 6 ? C.accent1 : k === 0 ? C.accent2 : C.accent5 }, line: { color: C.background2 } }));
+  text(s, "p₀ ≈ β₀ᵀz\np₁ ≈ β₁ᵀz\n…\np₉ ≈ β₉ᵀz", { x: 0.6 + 3 * (bw + gap) + 0.2, y: ys + 0.62, w: 1.7, h: 0.8, fontSize: 12, color: C.text1 });
+  for (let k = 0; k < 10; k++) grid(s, 0.6 + 4 * (bw + gap) + 0.15 + (k % 5) * 0.37, ys + 0.6 + Math.floor(k / 5) * 0.4, 0.085, m4, (v) => [k === 6 ? C.accent1 : C.accent5, v ? 0.7 : 0.15], 0.005);
+
+  bullets(s, [
+    "LIMEは、出力1本を線形モデルで近似する手法",
+    "多クラスでは、クラスごとに別々のLIMEを当てる",
+    { sub: true, text: "画像をスーパーピクセルに分け、隠し方を変えた摂動画像を作る" },
+    { sub: true, text: "摂動画像ごとにAIの10クラス分の確率を得て、クラス0の確率、クラス1の確率、…をそれぞれ線形回帰する" },
+    "結果として、クラスごとのヒートマップが10枚できる",
+  ], { x: 0.6, y: 4.0, w: 7.6, h: 2.8 });
+  card(s, 8.6, 4.15, 4.1, 1.6, C.background2);
+  text(s, "クラスごとの線形モデル", { x: 8.85, y: 4.3, w: 3.6, h: 0.35, fontSize: 13, color: C.text2 });
+  text(s, "pₖ(z) ≈ βₖ₀ + βₖᵀ z", { x: 8.85, y: 4.75, w: 3.6, h: 0.5, fontSize: 22, bold: true });
+  text(s, "k = 0, 1, …, 9", { x: 8.85, y: 5.3, w: 3.6, h: 0.35, fontSize: 13, color: C.text2 });
+}
+
+{
+  const s = newSlide("CONTENT", "問題点", "実際に使うときは、10枚のヒートマップをすべて見ることはなく、確率の高い6と0だけを見ると思います。ただ、比べるクラスは人が確率を見て決めたものです。そのため、一緒に動いている9を見落としたり、確率は高いのに近傍ではほとんど動かないクラスを選んだりすることがあります。もう1つの問題はクラス間の関係です。今日の問いは「なぜ0ではなく6か」で、これは6と0の関係についての問いです。ところが通常のLIMEはクラスごとに説明を返すので、関係は人が2枚のマップを見比べて組み立てるしかありません。");
+  const cw = 5.85, ch = 5.3, y = 1.4;
+  [0, 1].forEach((i) => card(s, 0.6 + i * (cw + 0.4), y, cw, ch));
+  badge(s, 0.85, y + 0.25, 1, C.accent1);
+  text(s, "比べるクラスを、人が決めている", { x: 1.5, y: y + 0.25, w: cw - 1.1, h: 0.5, fontSize: 20, bold: true, valign: "middle" });
+  bullets(s, [
+    "実際には10枚すべては見ず、確率の高い6と0だけを見ることが多い",
+    "選び方は人任せなので、一緒に動いている9は見落とす",
+    "確率は高くても、近傍ではほとんど動かないクラスを選んでしまうこともある",
+  ], { x: 0.9, y: y + 1.0, w: cw - 0.6, h: 2.6 });
+  [[0, 0.4, true], [6, 0.5, true], [9, 0.05, false]].forEach(([k, p, seen], i) => {
+    chip(s, 1.2 + i * 1.6, y + 3.85, k, seen ? CLS[k] : C.accent5, 0.6);
+    text(s, seen ? "見る" : "見落とす", { x: 0.95 + i * 1.6, y: y + 4.55, w: 1.1, h: 0.35, fontSize: 13, align: "center", color: seen ? C.text1 : C.accent1, bold: !seen });
+  });
+
+  const x2 = 0.6 + cw + 0.4;
+  badge(s, x2 + 0.25, y + 0.25, 2, C.accent1);
+  text(s, "クラス間の関係が見えない", { x: x2 + 0.9, y: y + 0.25, w: cw - 1.1, h: 0.5, fontSize: 20, bold: true, valign: "middle" });
+  bullets(s, [
+    "確率の和は1なので、6が上がれば別のどこかが下がる",
+    "知りたいのは「0から6へ確率が移った理由」",
+    "通常のLIMEでは、6のマップと0のマップを人が見比べて差を読むしかない",
+  ], { x: x2 + 0.3, y: y + 1.0, w: cw - 0.6, h: 2.6 });
+  const hm6 = DIGIT.map((row, r) => row.map((v, c) => (v > 0.15 && c <= 3 ? v : v * 0.3)));
+  const hm0 = DIGIT.map((row, r) => row.map((v, c) => (v > 0.15 && (r <= 2 || c >= 4) ? v : v * 0.3)));
+  grid(s, x2 + 0.5, y + 3.55, 0.15, hm6, (v) => [C.accent1, v], 0.01);
+  text(s, "6のマップ", { x: x2 + 0.4, y: y + 4.8, w: 1.4, h: 0.3, fontSize: 12, align: "center", color: C.text2 });
+  text(s, "−", { x: x2 + 1.8, y: y + 3.8, w: 0.6, h: 0.7, fontSize: 36, bold: true, align: "center" });
+  grid(s, x2 + 2.45, y + 3.55, 0.15, hm0, (v) => [C.accent2, v], 0.01);
+  text(s, "0のマップ", { x: x2 + 2.35, y: y + 4.8, w: 1.4, h: 0.3, fontSize: 12, align: "center", color: C.text2 });
+  text(s, "＝ ？\n人が頭の中で\n引き算する", { x: x2 + 3.9, y: y + 3.6, w: 1.8, h: 1.2, fontSize: 14, bold: true, color: C.accent1 });
+}
+
+{
+  const s = newSlide("CONTENT", "説明をまとめる2つの方向", "説明を読みやすくするには、この表を小さくすればよいわけです。行をまとめる方向は、画像LIMEのスーパーピクセルがまさにそうで、特徴のグループ化などの手法もあります。この研究は列、つまりクラスの方をまとめます。特徴は元のままなので、どの領域が効いたかという読み方は変わりません。");
+  text(s, "多クラスLIMEの説明は「特徴 × クラス」の表になっている", { x: 0.6, y: 1.3, w: 12, h: 0.4, fontSize: 18, color: C.text2 });
+  const gx = 1.8, gy = 3.25, cwid = 0.85, chh = 0.55;
+  const cols = ["クラス0", "クラス1", "…", "クラス9"], rows = ["領域1", "領域2", "領域3", "…"];
+  cols.forEach((c, j) => { s.addShape(pres.shapes.RECTANGLE, { x: gx + j * cwid, y: gy - chh, w: cwid - 0.04, h: chh - 0.04, fill: { color: C.text1 }, line: { color: C.text1 } }); text(s, c, { x: gx + j * cwid, y: gy - chh, w: cwid - 0.04, h: chh - 0.04, fontSize: 12, color: C.background1, align: "center", valign: "middle", bold: true }); });
+  rows.forEach((r, i) => {
+    text(s, r, { x: gx - 0.95, y: gy + i * chh, w: 0.85, h: chh - 0.04, fontSize: 12, align: "right", valign: "middle", color: C.text2 });
+    cols.forEach((_, j) => s.addShape(pres.shapes.RECTANGLE, { x: gx + j * cwid, y: gy + i * chh, w: cwid - 0.04, h: chh - 0.04, fill: { color: C.background2 }, line: { color: C.background2 } }));
+  });
+  // column-direction arrow (this study)
+  s.addShape(pres.shapes.LEFT_RIGHT_ARROW, { x: gx, y: gy - chh - 0.6, w: 4 * cwid - 0.04, h: 0.42, fill: { color: C.accent1 }, line: { color: C.accent1 } });
+  // row-direction arrow (existing)
+  s.addShape(pres.shapes.UP_DOWN_ARROW, { x: gx + 4 * cwid + 0.2, y: gy, w: 0.42, h: 4 * chh - 0.04, fill: { color: C.accent5 }, line: { color: C.accent5 } });
+
+  card(s, 7.0, 1.95, 5.7, 2.15, "FBE6DF");
+  text(s, "列（クラス）をまとめる　この研究", { x: 7.25, y: 2.1, w: 5.3, h: 0.45, fontSize: 18, bold: true, color: C.accent1 });
+  text(s, "例　クラス0とクラス6を「0から6への移動」にまとめる", { x: 7.25, y: 2.65, w: 5.3, h: 0.7, fontSize: 15 });
+  text(s, "特徴は元のままなので、どの領域が効いたかという読み方は変わらない", { x: 7.25, y: 3.3, w: 5.3, h: 0.7, fontSize: 13, color: C.text2 });
+  card(s, 7.0, 4.35, 5.7, 1.95, C.background2);
+  text(s, "行（特徴）をまとめる　既存の手法が多い", { x: 7.25, y: 4.5, w: 5.3, h: 0.45, fontSize: 18, bold: true, color: C.text2 });
+  text(s, "例　ピクセルをスーパーピクセルにまとめる、科目を「理系科目」にまとめる", { x: 7.25, y: 5.05, w: 5.3, h: 1.0, fontSize: 15 });
+}
+
+{
+  const s = newSlide("CONTENT", "発想", "説明したい画像のまわりだけを見ると、ほとんどのクラスは動きません。この例で動くのは0と6、それに9が少しです。この動きを少数の方向で表し、方向ごとに説明すれば、量も減り、クラス間の関係も直接読めるはずだ、というのが出発点です。");
+  const t = [0.2, -0.6, 0.9, -0.3, 0.5, -0.9, 0.1, 0.7, -0.4, 0.3, -0.7, 0.6];
+  const u = [0.3, -0.2, 0.1, 0.5, -0.4, 0.2, -0.1, 0.4, 0.0, -0.3, 0.2, -0.5];
+  const p6 = t.map((v, i) => +(0.5 + 0.25 * v - 0.02 * u[i]).toFixed(3));
+  const p9 = u.map((v) => +(0.05 + 0.04 * v).toFixed(3));
+  const p0 = p6.map((v, i) => +(0.95 - v - p9[i] - 0.003).toFixed(3));
+  const pOther = t.map((v, i) => +(0.007 + 0.002 * Math.sin(i)).toFixed(3));
+  const labels = t.map((_, i) => String(i + 1));
+  s.addChart(pres.charts.LINE, [
+    { name: "6", labels, values: p6 }, { name: "0", labels, values: p0 },
+    { name: "9", labels, values: p9 }, { name: "残り7クラス（それぞれ）", labels, values: pOther },
+  ], {
+    x: 0.6, y: 1.35, w: 7.2, h: 5.4, chartColors: [HEX.accent1, HEX.accent2, HEX.accent3, HEX.accent5], lineSize: 2.5, lineDataSymbol: "circle", lineDataSymbolSize: 7,
+    valAxisMinVal: 0, valAxisMaxVal: 0.8, valAxisLabelFormatCode: "0.0", showLegend: true, legendPos: "b", showTitle: true, title: "摂動画像ごとのAIの確率（例）", catAxisTitle: "摂動画像", showCatAxisTitle: true, catAxisTitleFontSize: 12, catAxisTitleColor: HEX.dk2, ...chartText, ...chartFrame(),
+  });
+  card(s, 8.2, 1.5, 4.5, 5.1);
+  bullets(s, [
+    "説明したい画像のまわりだけを見ると、確率が動くのは0・6・9くらい",
+    "残りの7クラスは、隠し方を変えてもほぼ0のまま",
+    "それなら、確率の動きは少数の方向で表せるはず",
+  ], { x: 8.45, y: 1.75, w: 4.0, h: 3.2 });
+  text(s, "方向の例", { x: 8.45, y: 5.0, w: 4.0, h: 0.35, fontSize: 13, color: C.text2 });
+  chip(s, 8.45, 5.35, 0, C.accent2, 0.5); text(s, "↓", { x: 9.0, y: 5.35, w: 0.4, h: 0.5, fontSize: 22, bold: true, valign: "middle", color: C.accent2 });
+  chip(s, 9.5, 5.35, 6, C.accent1, 0.5); text(s, "↑", { x: 10.05, y: 5.35, w: 0.4, h: 0.5, fontSize: 22, bold: true, valign: "middle", color: C.accent1 });
+  text(s, "0が下がり、6が上がる", { x: 8.45, y: 5.95, w: 4.0, h: 0.4, fontSize: 14 });
+}
+
+{
+  const s = newSlide("CONTENT", "目標とする説明", "目指す出力は、この表のような形です。軸1を見れば「主に0と6で迷っていて、縦線があるから6になった」と読めます。軸ごとに、出力の動きのどれだけを占めるかも出るので、「9の関与は小さい」ことも分かります。条件は、通常のLIMEと比べて、AIの振る舞いを近似する精度をほとんど落とさないことです。");
+  card(s, 0.6, 1.35, 3.6, 4.3);
+  text(s, "通常のLIME", { x: 0.85, y: 1.5, w: 3.1, h: 0.4, fontSize: 18, bold: true, color: C.text2 });
+  text(s, "クラスごとのヒートマップ10枚", { x: 0.85, y: 1.95, w: 3.1, h: 0.4, fontSize: 13, color: C.text2 });
+  const small = DIGIT.map((row) => row.map((v) => v));
+  for (let k = 0; k < 10; k++) {
+    const x = 0.95 + (k % 3) * 1.05, y = 2.5 + Math.floor(k / 3) * 0.75;
+    if (k === 9) { grid(s, 0.95 + 1.05, 2.5 + 3 * 0.75, 0.075, small, (v) => [C.accent5, v * 0.6], 0.004); continue; }
+    grid(s, x, y, 0.075, small, (v) => [C.accent5, v * 0.6], 0.004);
+  }
+  arrow(s, 4.35, 3.3, 0.5, 0.45, C.accent1);
+  card(s, 5.0, 1.35, 7.7, 4.3, "FBE6DF");
+  text(s, "この研究　軸ごとのヒートマップ1〜2枚", { x: 5.25, y: 1.5, w: 7.2, h: 0.4, fontSize: 18, bold: true, color: C.accent1 });
+  // axis 1
+  grid(s, 5.35, 2.15, 0.27, DIGIT, axis1Color, 0.02);
+  chip(s, 7.75, 2.2, 0, C.accent2, 0.45); text(s, "→", { x: 8.25, y: 2.2, w: 0.4, h: 0.45, fontSize: 20, bold: true, valign: "middle" }); chip(s, 8.65, 2.2, 6, C.accent1, 0.45);
+  text(s, "軸1　出力の動きの90%", { x: 7.75, y: 2.8, w: 4.7, h: 0.4, fontSize: 16, bold: true });
+  text(s, "左の縦線（赤）が6寄り、上の閉じた弧（青）が0寄り", { x: 7.75, y: 3.2, w: 4.7, h: 0.7, fontSize: 13, color: C.text2 });
+  // axis 2
+  grid(s, 7.75 + 0.0, 4.1, 0.14, DIGIT, axis2Color, 0.01);
+  text(s, "軸2　0・6 → 9　出力の動きの8%\n9らしく見せる領域（黄）", { x: 9.05, y: 4.1, w: 3.5, h: 1.0, fontSize: 13, color: C.text2 });
+  text(s, "（数値とヒートマップは説明のための例）", { x: 5.35, y: 5.25, w: 7, h: 0.3, fontSize: 11, color: C.text2 });
+  card(s, 0.6, 5.9, 12.1, 0.85, C.text1);
+  s.addText([
+    { text: "目標　", options: { color: C.accent3, bold: true } },
+    { text: "LIMEに劣らない忠実さを保ったまま、解釈しやすさを上げる", options: { color: C.background1, bold: true } },
+  ], { isTextBox: true, x: 0.9, y: 5.9, w: 11.6, h: 0.85, margin: 0, fontSize: 22, valign: "middle" });
+}
+
+startSection("手法と仮定");
+
+{
+  const s = newSlide("CONTENT", "手法", "手順の違いは、回帰する目的変数だけです。通常のLIMEは「6の確率」を回帰しますが、この手法は「軸1のスコア」を回帰します。軸1が「6が上がり0が下がる」方向なら、スコアは6寄りか0寄りかを表す1つの数です。表の例では、Aを隠すと0寄りに、Bを隠すと6寄りに動きます。回帰で得られる係数は、Aが正、Bが負です。これをヒートマップにすれば、「Aがあるから6、Bがあるから0の可能性も残った」と1枚で読めます。軸はPCAで近傍の確率の動きから決めるので、どのクラスの対比を見るかを人が選ぶ必要はありません。");
+  const steps = [
+    "摂動画像を作り、AIの確率（10個の数）を得る",
+    "確率の点の集まりにPCAをかけ、動きの大きい方向（軸）を求める",
+    "各摂動画像の確率を、軸の上の1つの数（スコア）に変える",
+    "スコアを、領域の有無で線形回帰する（通常のLIMEと同じ）",
+    "回帰係数をヒートマップにする",
+  ];
+  steps.forEach((t, i) => {
+    badge(s, 0.6, 1.45 + i * 1.02, i + 1, i === 1 || i === 2 ? C.accent1 : C.text1, 0.45);
+    text(s, t, { x: 1.2, y: 1.42 + i * 1.02, w: 3.8, h: 0.9, fontSize: 15 });
+  });
+  const hdr = ["摂動画像", "A", "B", "C", "0の確率", "6の確率", "スコア（6 − 0）"];
+  const rows = [["元画像", 1, 1, 1, "0.40", "0.50", "+0.10"], ["Aを隠す", 0, 1, 1, "0.70", "0.20", "−0.50"], ["Bを隠す", 1, 0, 1, "0.10", "0.80", "+0.70"], ["Cを隠す", 1, 1, 0, "0.45", "0.40", "−0.05"]];
+  table(s, hdr, rows.map((r, i) => r.map((v, j) => ({ text: String(v), options: { fill: { color: i % 2 ? C.background1 : C.background2 }, bold: j === 6, color: j === 6 ? C.accent1 : C.text1, align: j === 0 ? "left" : "center" } }))), { x: 5.4, y: 1.45, w: 7.3, colW: [1.25, 0.6, 0.6, 0.6, 1.2, 1.2, 1.85], rowH: 0.45, fontSize: 14 });
+  card(s, 5.4, 4.0, 7.3, 2.75);
+  text(s, "回帰の結果", { x: 5.65, y: 4.15, w: 3, h: 0.35, fontSize: 13, color: C.text2 });
+  s.addText([
+    { text: "スコア ≈ −0.05 ＋ ", options: {} },
+    { text: "0.60A", options: { color: C.accent1, bold: true } },
+    { text: " − ", options: {} },
+    { text: "0.60B", options: { color: C.accent2, bold: true } },
+    { text: " ＋ 0.15C", options: {} },
+  ], { isTextBox: true, x: 5.65, y: 4.55, w: 6.9, h: 0.5, margin: 0, fontSize: 20, color: C.text1 });
+  [["A", C.accent1, 0.95, "6寄り"], ["B", C.accent2, 0.95, "0寄り"], ["C", C.accent1, 0.3, "やや6寄り"]].forEach(([l, col, st, d], i) => {
+    const x = 5.75 + i * 2.2;
+    s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x, y: 5.3, w: 0.9, h: 0.9, rectRadius: 0.08, fill: { color: col, transparency: Math.round(100 - st * 100) }, line: { color: col } });
+    text(s, l, { x, y: 5.3, w: 0.9, h: 0.9, fontSize: 22, bold: true, align: "center", valign: "middle", color: st > 0.5 ? C.background1 : C.text1 });
+    text(s, `領域${l}\n${d}`, { x: x + 1.0, y: 5.4, w: 1.1, h: 0.75, fontSize: 13, color: C.text2 });
+  });
+}
+
+{
+  const s = newSlide("CONTENT", "上位2クラスのLIMEとの違い", "当然、上位2クラスの差を説明すればよいのでは、という疑問が出ると思います。競合が2クラスだけなら、この手法も同じ結果になります。違いが出るのは、3クラス以上が同時に競合しているときと、確率は高いけれど近傍ではほとんど動かないクラスがあるときです。この手法は確率の動きから軸を決めるので、そうした場合も扱えます。");
+  card(s, 0.6, 1.4, 12.1, 1.0, C.background2);
+  s.addText([
+    { text: "確率が高い2クラスの差（", options: {} },
+    { text: "6", options: { color: C.accent1, bold: true } },
+    { text: " − ", options: {} },
+    { text: "0", options: { color: C.accent2, bold: true } },
+    { text: "）をLIMEで説明すればよいのでは？", options: {} },
+  ], { isTextBox: true, x: 0.9, y: 1.4, w: 11.6, h: 1.0, margin: 0, fontSize: 22, bold: true, valign: "middle", color: C.text1 });
+  const cell = (t, o) => ({ text: t, options: { fill: { color: C.background1 }, ...o } });
+  s.addTable([
+    [cell("状況", { bold: true, color: C.background1, fill: { color: C.text1 } }), cell("上位2クラスの差", { bold: true, color: C.background1, fill: { color: C.text2 } }), cell("この手法", { bold: true, color: C.background1, fill: { color: C.accent1 } })],
+    [cell("0と6だけが競合", { bold: true, fill: { color: C.background2 } }), cell("同じ結果"), cell("同じ結果")],
+    [cell("0・6・9が競合", { bold: true, fill: { color: C.background2 } }), cell("9を取りこぼす"), cell("複数の軸で表せる", { color: C.accent1, bold: true })],
+    [cell("どのクラスを比べるか", { bold: true, fill: { color: C.background2 } }), cell("確率の高い順に人が決める"), cell("近傍での確率の動きから決まる", { color: C.accent1, bold: true })],
+  ], { x: 0.6, y: 2.8, w: 12.1, colW: [3.4, 4.35, 4.35], rowH: 0.8, fontSize: 18, color: C.text1, border: { type: "solid", pt: 1, color: "DDE2EA" }, valign: "middle", margin: [4, 10, 4, 10] });
+}
+
+{
+  const s = newSlide("CONTENT", "成り立つための仮定", "この手法が働くには、2つの仮定が必要です。1つ目は、近傍で出力が動く方向が少ないことです。競合するクラスが少なければ、この仮定は必ず成り立ちます。確率の和が1なので、2クラスだけが動くなら、片方が上がった分だけもう片方が下がり、動く方向は1つです。ただし逆は言えず、多くのクラスがまとまって動く場合にも方向は少なくなります。2つ目は、通常のLIMEと同じ「局所的に線形で近似できる」という仮定です。");
+  card(s, 0.6, 1.35, 12.1, 4.15);
+  badge(s, 0.85, 1.55, 1, C.accent1, 0.45);
+  text(s, "仮定1　局所的には、出力が少数の方向にしか動かない", { x: 1.45, y: 1.52, w: 10.9, h: 0.5, fontSize: 19, bold: true, valign: "middle" });
+  bullets(s, [
+    "典型的には、近傍で競合するクラスが少ないとき",
+    { sub: true, text: "0と6だけが動くなら、6が上がった分だけ0が下がるので1方向" },
+    { sub: true, text: "一般に、動くクラスがm個なら、方向は多くてもm−1個" },
+    "多くのクラスがまとまって動く場合も、方向は少なくなる",
+  ], { x: 0.9, y: 2.2, w: 5.4, h: 3.1, subSize: 14 });
+  // scatter: 2 classes on a line vs 3 classes spread
+  const rnd = (i) => Math.sin(i * 12.9898) * 43758.5453 % 1;
+  const xs = [], y1 = [], y2 = [];
+  for (let i = 0; i < 40; i++) { const t = 0.3 * Math.abs(rnd(i + 1)) - 0.15; const u = 0.08 * rnd(i + 99); xs.push(+(0.4 - t).toFixed(3)); y1.push(+(0.5 + t).toFixed(3)); y2.push(+(0.5 + t - u).toFixed(3)); }
+  const scatterOpts = (title, color) => ({ lineSize: 0, lineDataSymbol: "circle", lineDataSymbolSize: 6, chartColors: [color], valAxisMinVal: 0.2, valAxisMaxVal: 0.8, catAxisMinVal: 0.1, catAxisMaxVal: 0.7, showLegend: false, showTitle: true, title, showValAxisTitle: true, valAxisTitle: "6の確率", showCatAxisTitle: true, catAxisTitle: "0の確率", valAxisTitleFontSize: 11, catAxisTitleFontSize: 11, valAxisTitleColor: HEX.dk2, catAxisTitleColor: HEX.dk2, valAxisLabelFormatCode: "0.0", catAxisLabelFormatCode: "0.0", ...chartText, ...chartFrame() });
+  s.addChart(pres.charts.SCATTER, [{ name: "0", values: xs }, { name: "6", values: y1 }], { x: 6.5, y: 2.05, w: 3.0, h: 3.3, ...scatterOpts("0と6だけが動く → 直線上", HEX.accent1) });
+  s.addChart(pres.charts.SCATTER, [{ name: "0", values: xs }, { name: "6", values: y2 }], { x: 9.6, y: 2.05, w: 3.0, h: 3.3, ...scatterOpts("9も動く → 平面に広がる", HEX.accent3) });
+  card(s, 0.6, 5.75, 12.1, 1.0);
+  badge(s, 0.85, 6.02, 2, C.text1, 0.45);
+  text(s, "仮定2　局所的には、AIの出力が線形で近似できる（通常のLIMEと同じ仮定）", { x: 1.45, y: 5.75, w: 11, h: 1.0, fontSize: 19, bold: true, valign: "middle" });
+}
+
+startSection("実験");
+
+{
+  const sh = DATA.deviation.share;
+  const s = newSlide("CONTENT", "仮定1の確かめ方", "仮定1は、次のように確かめます。説明する点のまわりに摂動データを撒き、元の点の出力からどれだけずれたかをクラスごとに測ります。ずれの大きいクラスから足していき、全体の95%に届くまでのクラス数が「動くクラスの数」です。どのクラスもわずかには動くので、95%で区切っています。もう1つの「必要な軸の数」は、600点のずれがいくつの向きで表せるかを数えたものです。0と6が入れ替わるだけなら、どのずれも「0が下がり6が上がる」向きなので、1つで足ります。\n\n右のグラフは手書き数字データの実際の説明点の1つ（正解2）。2・3・9の3クラスでずれの97%を占め、動くクラスの数は3、必要な軸の数は2だった。");
+  const steps = [
+    ["摂動データを撒く", "説明する点のまわりに、小さい半径で600点"],
+    ["元の出力からのずれを測る", "摂動データごとにAIの確率を出し、元の点の確率との差を取る"],
+    ["動くクラスの数", "ずれの大きいクラスから順に足し、全体のずれの95%に届くまでのクラス数"],
+    ["必要な軸の数", "600点のずれを表すのに必要な向きの数（全体のずれの95%まで）"],
+  ];
+  steps.forEach(([t, d], i) => {
+    badge(s, 0.6, 1.45 + i * 1.32, i + 1, i >= 2 ? C.accent1 : C.text1, 0.45);
+    text(s, t, { x: 1.2, y: 1.42 + i * 1.32, w: 4.6, h: 0.45, fontSize: 17, bold: true });
+    text(s, d, { x: 1.2, y: 1.87 + i * 1.32, w: 4.6, h: 0.8, fontSize: 13, color: C.text2 });
+  });
+  const pct = sh.map((v) => +(100 * v).toFixed(1));
+  s.addChart(pres.charts.BAR, [{ name: "ずれの割合", labels: pct.map((_, k) => String(k)), values: pct }], {
+    x: 6.2, y: 1.35, w: 6.5, h: 4.45, barDir: "col", barGapWidthPct: 40,
+    chartColors: pct.map((_, k) => (k === 2 || k === 3 || k === 9 ? HEX.accent1 : HEX.accent5)),
+    showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0", valAxisMinVal: 0, valAxisMaxVal: 50, valAxisLabelFormatCode: "0", showLegend: false,
+    showTitle: true, title: "手書き数字の説明点1つでの、クラスごとのずれの割合（%）", catAxisTitle: "クラス", ...chartText, ...chartFrame(),
+  });
+  card(s, 6.2, 5.95, 6.5, 0.8, C.background2);
+  s.addText([
+    { text: "動くクラスの数 ", options: { color: C.text2 } }, { text: "3", options: { bold: true, color: C.accent1 } },
+    { text: "（2・3・9で97%）　必要な軸の数 ", options: { color: C.text2 } }, { text: "2", options: { bold: true, color: C.accent1 } },
+  ], { isTextBox: true, x: 6.4, y: 5.95, w: 6.2, h: 0.8, margin: 0, fontSize: 15, valign: "middle" });
+}
+
+{
+  const s = newSlide("CONTENT", "実験の設定", "実験では2つのことを確かめました。1つ目は仮定1、2つ目は軸を減らしたときに通常のLIMEと比べてどれだけ忠実さを失うかです。忠実さは、学習に使っていない摂動で、説明のモデルがAIの確率をどれだけ再現できるかで測ります。データは公開されている実データを4つ使いました。手書き数字は今日の例と同じデータです。なお実験では、スーパーピクセルを隠す代わりに、画素の値に小さな正規分布の摂動を加えています。");
+  [["1", "近傍で、出力は少数の方向にしか動かないか（仮定1）"], ["2", "少数の軸にまとめても、通常のLIMEと同じくらい忠実か"]].forEach(([n, t], i) => {
+    card(s, 0.6 + i * 6.2, 1.35, 5.9, 1.0, C.background2);
+    badge(s, 0.85 + i * 6.2, 1.6, n, C.accent1, 0.5);
+    text(s, t, { x: 1.55 + i * 6.2, y: 1.35, w: 4.8, h: 1.0, fontSize: 17, bold: true, valign: "middle" });
+  });
+  table(s, ["項目", "内容"], [
+    ["データ", "手書き数字（10クラス、8×8画素）、文字認識（26クラス、16特徴）、yeast（9クラス、8特徴）、ワイン品質（6クラス、11特徴）"],
+    ["分類器", "MLP、RBFカーネルのSVM（どちらも出力が滑らか）"],
+    ["説明する点", "予測の迷い（1位と2位の確率差）が大・中・小から各10点、3回の学習で各データ90点"],
+    ["近傍", "標準化した特徴に、データの共分散に沿った正規分布の摂動を加える。半径0.15と0.4"],
+    ["忠実さの評価", "学習に使っていない摂動600点での決定係数 R²（全クラスの確率で計算）"],
+  ], { x: 0.6, y: 2.65, w: 12.1, colW: [2.3, 9.8], rowH: 0.6, fontSize: 15 });
+}
+
+{
+  const s = newSlide("CONTENT", "結果1　局所的には少数の方向にしか動かない", "どのデータでも、近傍で確率が動くクラスは3つ前後で、出力は2本前後の軸で表せました。26クラスの文字認識でも同じです。必要な軸の数は動くクラスの数より1つ前後少なく、2クラスが動くなら1軸、3クラスなら2軸という仮定1の説明とおおむね合います。つまり、低次元になる主な理由は、近傍で競合するクラスが少ないことです。ただ、手書き数字とyeastでは、軸の数がそれよりさらに少ない近傍が3〜4割ありました。これは、複数のクラスがまとまって動いていることを表しています。半径を0.4に広げると、文字認識では動くクラスが5つ程度に増えます。SVMでも同じ傾向で、軸の数は平均1.4〜1.9本でした。");
+  const labels = ["手書き数字（10）", "文字認識（26）", "yeast（9）", "ワイン品質（6）"];
+  s.addChart(pres.charts.BAR, [
+    { name: "動くクラスの数", labels, values: [3.04, 2.85, 3.88, 2.81] },
+    { name: "必要な軸の数", labels, values: [1.71, 1.90, 2.17, 1.68] },
+  ], {
+    x: 0.6, y: 1.35, w: 7.4, h: 4.6, barDir: "col", barGrouping: "clustered", barGapWidthPct: 60, chartColors: [HEX.accent5, HEX.accent1],
+    showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0", valAxisMinVal: 0, valAxisMaxVal: 5, valAxisLabelFormatCode: "0",
+    showLegend: true, legendPos: "b", showTitle: true, title: "MLP、半径0.15（かっこ内はクラス数）", ...chartText, ...chartFrame(),
+  });
+  card(s, 8.3, 1.35, 4.4, 4.6);
+  bullets(s, [
+    "26クラスの文字認識でも、近傍で動くクラスは3つ前後、軸は2本前後",
+    "必要な軸の数は、動くクラスの数より1つ前後少ない",
+    { sub: true, text: "低次元の主な理由は、近傍で競合するクラスが少ないこと" },
+    { sub: true, text: "手書き数字とyeastでは、複数のクラスがまとまって動く近傍もあった（32%、45%）" },
+    "SVMでも同じ傾向（軸は平均1.4〜1.9本）",
+  ], { x: 8.55, y: 1.6, w: 3.95, h: 4.2, fontSize: 15, subSize: 13 });
+  text(s, "値は元の出力からのずれで測った平均。出力がほぼ一定の近傍は除いた", { x: 0.6, y: 6.15, w: 12, h: 0.35, fontSize: 11, color: C.text2 });
+}
+
+{
+  const s = newSlide("CONTENT", "結果2　通常のLIMEに劣らないか", "4つのデータのどれでも、3軸にまとめたときに失う R² は0.02未満でした。説明の量は大きく減りますが、忠実さはほとんど変わりません。一方で、軸を1本まで減らすと、yeastでは0.2ほど落ちます。結果1で見たとおり、必要な軸は2本前後なので、それより少なくすると表しきれません。SVMでも、3軸で失う R² は0.001〜0.015でした。なお、文字認識では通常のLIME自体の R² が0.5程度と低く、これは次の課題につながります。");
+  const labels = ["手書き数字", "文字認識", "yeast", "ワイン品質"];
+  s.addChart(pres.charts.BAR, [
+    { name: "1軸", labels, values: [0.783, 0.434, 0.765, 0.863] },
+    { name: "2軸", labels, values: [0.855, 0.483, 0.936, 0.969] },
+    { name: "3軸", labels, values: [0.868, 0.491, 0.967, 0.976] },
+    { name: "通常のLIME", labels, values: [0.874, 0.494, 0.974, 0.977] },
+  ], {
+    x: 0.6, y: 1.35, w: 7.6, h: 4.9, barDir: "col", barGrouping: "clustered", barGapWidthPct: 50, chartColors: ["F2B8A6", "E5835F", HEX.accent1, HEX.dk1],
+    showValue: false, valAxisMinVal: 0, valAxisMaxVal: 1, valAxisLabelFormatCode: "0.0", showLegend: true, legendPos: "b",
+    showTitle: true, title: "学習に使っていない摂動での R²（MLP、半径0.15）", ...chartText, ...chartFrame(),
+  });
+  card(s, 8.5, 1.35, 4.2, 1.9, C.text1);
+  text(s, "3軸にまとめたときに失う R²", { x: 8.75, y: 1.5, w: 3.8, h: 0.35, fontSize: 13, color: C.accent5 });
+  text(s, "0.017以下", { x: 8.75, y: 1.9, w: 3.8, h: 0.8, fontSize: 40, bold: true, color: C.background1 });
+  text(s, "4データ・2半径、MLP", { x: 8.75, y: 2.75, w: 3.8, h: 0.35, fontSize: 12, color: C.accent5 });
+  bullets(s, [
+    "係数は640個（64画素×10クラス）から222個に減る（手書き数字）",
+    "1軸だと失う量は0.06〜0.22",
+    { sub: true, text: "2本前後より減らすと落ちる" },
+    "SVMでも3軸の損失は0.015以下",
+  ], { x: 8.5, y: 3.5, w: 4.2, h: 3.0, fontSize: 15, subSize: 13 });
+}
+
+startSection("課題と今後");
+
+{
+  const s = newSlide("CONTENT", "課題", "課題は2つあります。1つ目は軸の読みやすさです。PCAの軸は、複数のクラスに重みが分かれることがあります。柴犬が上がって秋田犬と三毛猫が下がる形なら「柴犬の確率は主に秋田犬から来た」と読めますが、柴犬と三毛猫が同じ側に並ぶと意味が取れません。次元を減らすだけでは足りず、減らした後の軸が理解できることも条件になります。2つ目は、通常のLIME自体の忠実さが低い条件があることです。この手法は通常のLIMEを少数の軸で近似するものなので、その限界は引き継ぎます。");
+  card(s, 0.6, 1.35, 7.6, 5.4);
+  badge(s, 0.85, 1.55, 1, C.accent1, 0.45);
+  text(s, "軸が読めるとは限らない", { x: 1.45, y: 1.52, w: 6.5, h: 0.5, fontSize: 20, bold: true, valign: "middle" });
+  const ok = (t) => ({ text: t, options: { color: C.accent4, bold: true, align: "center", fill: { color: C.background1 } } });
+  const ng = (t) => ({ text: t, options: { color: C.accent1, bold: true, align: "center", fill: { color: C.background1 } } });
+  const c = (t) => ({ text: t, options: { fill: { color: C.background1 } } });
+  s.addTable([
+    [{ text: "軸の形", options: { bold: true, color: C.background1, fill: { color: C.text1 } } }, { text: "例", options: { bold: true, color: C.background1, fill: { color: C.text1 } } }, { text: "読めるか", options: { bold: true, color: C.background1, fill: { color: C.text1 }, align: "center" } }],
+    [c("2クラスの対比"), c("柴犬 + ／ 秋田犬 −"), ok("読める")],
+    [c("1対多"), c("柴犬 +0.8 ／ 秋田犬 −0.5、三毛猫 −0.3"), ok("読める")],
+    [c("混在"), c("柴犬 +0.37、三毛猫 +0.21 ／ 秋田犬 −0.46"), ng("読めない")],
+  ], { x: 0.9, y: 2.3, w: 7.0, colW: [1.55, 4.35, 1.1], rowH: 0.7, fontSize: 13, color: C.text1, border: { type: "solid", pt: 1, color: "DDE2EA" }, valign: "middle", margin: [3, 6, 3, 6] });
+  text(s, "次元が減っても、軸の意味が分からなければ解釈しやすくならない", { x: 0.9, y: 5.4, w: 7.0, h: 0.9, fontSize: 16, bold: true, color: C.accent1 });
+
+  card(s, 8.5, 1.35, 4.2, 5.4);
+  badge(s, 8.75, 1.55, 2, C.text1, 0.45);
+  text(s, "通常のLIME自体が忠実でない条件がある", { x: 9.35, y: 1.5, w: 3.2, h: 0.9, fontSize: 18, bold: true });
+  bullets(s, [
+    "文字認識（26クラス）や半径0.4の手書き数字では、通常のLIMEの R² が0.3〜0.6にとどまる",
+    "この手法は通常のLIMEの近似なので、そこは改善できない",
+  ], { x: 8.8, y: 2.65, w: 3.7, h: 3.8, fontSize: 15 });
+}
+
+{
+  const s = newSlide("CONTENT", "今後の計画と最終ゴール", "次は、軸を読めるようにする方法を考えます。たとえば、軸の形を「2クラスの対比」や「1対多」に限った中で、確率の動きを最もよく表す軸を選ぶ方法です。データも増やして評価し、最後は人に説明を見てもらって、本当に分かりやすくなったかを確かめたいと考えています。");
+  const steps = [
+    ["読める軸を作る", "軸の形を対比や1対多に限る、回転、スパース化", "忠実さを保ったまま軸が読めるか"],
+    ["データを広げる", "クラス数が多く、似たクラスが群になったデータなど", "仮定が成り立つ範囲"],
+    ["説明の量をそろえる", "上位クラスの対比や特徴選択ありのLIMEと", "同じ量の説明で、より忠実か"],
+    ["人による評価", "説明を読んで判断してもらう", "本当に分かりやすくなったか"],
+  ];
+  const sw = 2.85, gap = 0.233;
+  s.addShape(pres.shapes.LINE, { x: 0.6 + 0.3, y: 1.85, w: 3 * (sw + gap), h: 0, line: { color: C.accent5, width: 2 } });
+  steps.forEach(([t, d, q], i) => {
+    const x = 0.6 + i * (sw + gap);
+    badge(s, x + 0.05, 1.6, i + 1, i === 0 ? C.accent1 : C.text1, 0.5);
+    card(s, x, 2.35, sw, 2.95);
+    text(s, t, { x: x + 0.2, y: 2.5, w: sw - 0.4, h: 0.8, fontSize: 16, bold: true });
+    text(s, d, { x: x + 0.2, y: 3.3, w: sw - 0.4, h: 0.95, fontSize: 13, color: C.text2 });
+    text(s, "確かめること　" + q, { x: x + 0.2, y: 4.3, w: sw - 0.4, h: 0.9, fontSize: 13, color: C.accent1 });
+  });
+  card(s, 0.6, 5.6, 12.1, 1.15, C.text1);
+  text(s, "最終ゴール", { x: 0.9, y: 5.68, w: 3, h: 0.35, fontSize: 13, bold: true, color: C.accent3 });
+  text(s, "多クラス分類器の予測を「どのクラスからどのクラスへ、どの特徴によって確率が移ったか」という少数の軸で説明し、通常のLIMEより人が理解しやすいことを示す", { x: 0.9, y: 6.0, w: 11.6, h: 0.7, fontSize: 16, bold: true, color: C.background1 });
+}
+
+{
+  const s = newSlide("CLOSING", "まとめ", "");
+  const pts = [
+    "多クラスLIMEは、比べるクラスを人が決めていて、クラス間の関係も見えない",
+    "AIの出力を説明したい点のまわりで次元削減し、「0から6への移動」のような軸ごとに説明する",
+    "実データ4種では、出力は局所的に2本前後の軸で表せ、3軸にまとめても通常のLIMEにほぼ劣らない",
+    "次の課題は、減らした軸を人が読めるようにすること",
+  ];
+  pts.forEach((t, i) => {
+    badge(s, 0.8, 1.6 + i * 1.25, i + 1, i === 3 ? C.accent1 : C.accent2, 0.55);
+    text(s, t, { x: 1.6, y: 1.55 + i * 1.25, w: 10.9, h: 0.7, fontSize: 20, color: C.background1, valign: "middle" });
+  });
+}
+
+startSection("付録");
+
+{
+  const s = newSlide("CONTENT", "付録A　記号と用語", "");
+  table(s, ["記号・用語", "意味"], [
+    ["K", "クラス数"], ["d", "特徴（スーパーピクセル）の数"], ["p(z)", "摂動 z に対するAIの確率（K個の数）"],
+    [{ text: [{ text: "V" }, { text: "q", options: { subscript: true } }], options: { fill: { color: C.background1 } } }, { text: "PCAで求めた q 本の軸（各列がクラスの重み）", options: { fill: { color: C.background1 } } }], ["B", "通常のLIMEの係数行列（d × K）"],
+    ["必要な軸の数", "元の出力からのずれの95%を表すのに必要な最小の向きの数"],
+    ["動くクラスの数", "元の出力からのずれの95%を担う最小のクラス数。0と6だけが動くなら2"],
+  ], { x: 0.6, y: 1.4, w: 12.1, colW: [2.8, 9.3], rowH: 0.62, fontSize: 15 });
+}
+
+{
+  const s = newSlide("CONTENT", "付録B　通常のLIMEとの関係", "");
+  text(s, "全特徴を使う線形回帰（Ridge）は目的変数について線形なので、次が厳密に成り立つ", { x: 0.6, y: 1.4, w: 12, h: 0.5, fontSize: 17 });
+  card(s, 0.6, 2.1, 12.1, 1.4, C.background2);
+  s.addText([
+    { text: "p̂（この手法） ＝ μ ＋ （p̂（通常のLIME） − μ） V" }, { text: "q", options: { subscript: true } },
+    { text: " V" }, { text: "q", options: { subscript: true } }, { text: "ᵀ" },
+  ], { isTextBox: true, x: 0.9, y: 2.1, w: 11.6, h: 1.4, margin: 0, fontSize: 26, bold: true, valign: "middle", align: "center", color: C.text1 });
+  bullets(s, [
+    "この手法の予測は、通常のLIMEの予測を q 本の軸に射影したものと一致する",
+    "そのため、忠実さで通常のLIMEを上回ることはない",
+    "この研究では、通常のLIMEに劣らない忠実さを保ったまま、説明の量を減らし、クラス間の関係を読めるようにすることを目指す",
+  ], { x: 0.6, y: 3.9, w: 12.1, h: 2.8 });
+}
+
+{
+  const s = newSlide("CONTENT", "付録C　想定質問", "");
+  const qa = [
+    ["上位2クラスの差を説明すれば十分では？", "2クラスだけが競合する近傍では同じ結果になる。実データ4種で軸1本同士を比べた予備実験では、動くクラスが2つ以下の近傍で差はほぼなく、3つ以上の近傍でこの手法の R² が高かった"],
+    ["入力側（特徴）をまとめればよいのでは？", "入力側をまとめる方法は既にあり、この研究と組み合わせられる。この研究は、まだ扱いの少ないクラス側をまとめる"],
+    ["なぜPCAなのか？", "出力の動きを最もよく再現する軸が得られるため、まず基準としてPCAを使った。読みやすさのために、軸の形を制限する方法を今後試す"],
+    ["ランダムフォレストでは使えないのか？", "合成データの実験（付録D）では、近傍で多くのクラスの票が少しずつ揺れるため軸を減らせなかった。通常のLIMEの R² も0.6〜0.7台にとどまる"],
+  ];
+  qa.forEach(([q, a], i) => {
+    const x = 0.6 + (i % 2) * 6.2, y = 1.35 + Math.floor(i / 2) * 2.75;
+    card(s, x, y, 5.9, 2.5);
+    text(s, "Q　" + q, { x: x + 0.25, y: y + 0.18, w: 5.4, h: 0.5, fontSize: 16, bold: true, color: C.accent1 });
+    text(s, a, { x: x + 0.25, y: y + 0.75, w: 5.4, h: 1.65, fontSize: 14 });
+  });
+}
+
+{
+  const s = newSlide("CONTENT", "付録D　合成データでの結果", "");
+  text(s, "合成データ（10・20クラス、特徴40個）で、MLPとランダムフォレストを比べた（半径0.15）", { x: 0.6, y: 1.35, w: 12.1, h: 0.6, fontSize: 15, color: C.text2 });
+  table(s, ["条件", "動くクラスの数", "必要な軸の数", "3軸の R²（通常のLIME → この手法）"], [
+    ["MLP 10クラス", "2.54", "1.49", "0.828 → 0.825"], ["MLP 20クラス", "3.15", "2.09", "0.793 → 0.785"],
+    ["ランダムフォレスト 10クラス", "6.94", "5.13", "0.735 → 0.678"], ["ランダムフォレスト 20クラス", "14.31", "11.06", "0.638 → 0.519"],
+  ], { x: 0.6, y: 2.1, w: 12.1, colW: [3.6, 2.2, 2.2, 4.1], rowH: 0.6, fontSize: 15 });
+  bullets(s, [
+    "MLPは実データと同じく、少数の軸で表せ、3軸でほぼ劣らない",
+    "ランダムフォレストは票が多くのクラスで少しずつ揺れるため、動くクラスも軸も多く、3軸では足りない",
+  ], { x: 0.6, y: 5.3, w: 12.1, h: 1.4 });
+}
+
+(async () => {
+  await pres.writeFile({ fileName: outPath });
+  await applyTheme(outPath, THEME);
+  // pptxgenjs leaves the theme's East Asian font empty; set it so Japanese text uses the theme font.
+  const JSZip = require(require.resolve("jszip", { paths: [require.resolve("pptxgenjs")] }));
+  const zip = await JSZip.loadAsync(fs.readFileSync(outPath));
+  const themePath = "ppt/theme/theme1.xml";
+  let xml = await zip.file(themePath).async("string");
+  xml = xml.replace(/<a:ea typeface=""\s*\/>/g, `<a:ea typeface="${THEME.bodyFontFace}"/>`);
+  zip.file(themePath, xml);
+  fs.writeFileSync(outPath, await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
+  console.log("wrote", outPath);
+})();
