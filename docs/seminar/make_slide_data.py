@@ -3,7 +3,9 @@
 
 * digit_image: a real digits test image (true 6, MLP predicts 6 with 0 second).
 * deviation: per-class share of the squared deviation from the explained
-  point's output, for the first low-margin digits point with 3 moving classes.
+  point's output, for the first low-margin digits point with 3 moving classes,
+  plus one perturbed example, the share of each deviation axis (uncentered
+  weighted PCA of the deviations), the axis loadings and 200 projected points.
 """
 
 import json
@@ -46,7 +48,17 @@ for index in np.argsort(ordered[:, -1] - ordered[:, -2])[:60]:
     normalized = weights / weights.sum()
     energy = np.sum(normalized[:, None] * (perturbed - reference) ** 2, axis=0)
     if result.moving_classes == 3:
+        offsets = np.sqrt(normalized)[:, None] * (perturbed - reference)
+        _, singular, axes = np.linalg.svd(offsets, full_matrices=False)
+        axis_share = singular**2 / np.sum(singular**2)
+        scores = (perturbed - reference) @ axes[:2].T
+        example = int(np.argmax(weights))
         deviation = {
+            "example_perturbed": perturbed[example].round(2).tolist(),
+            "example_deviation": (perturbed[example] - reference).round(2).tolist(),
+            "axis_share": axis_share[:3].round(3).tolist(),
+            "axis_loadings": axes[:2].round(2).tolist(),
+            "scores": scores[:200].round(4).tolist(),
             "index": int(index),
             "label": int(y_test[index]),
             "probs": reference.round(3).tolist(),

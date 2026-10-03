@@ -13,6 +13,7 @@ const pptxgen = require("pptxgenjs");
 
 const [dataPath, outPath, applyThemePath] = process.argv.slice(2);
 const DATA = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+const REGION_FIGURE = require("path").join(require("path").dirname(dataPath), "region_figure.png");
 const { applyTheme } = require(applyThemePath);
 
 const THEME = {
@@ -136,6 +137,30 @@ function axis2Color(v, r, c) {
   return [C.accent5, 0.15 * v];
 }
 
+
+// Agenda slide shown at the start of each section; the current section is highlighted.
+const AGENDA = [
+  ["導入", "今日の問い"],
+  ["問題と発想", "多クラスLIMEの問題、クラス側をまとめる発想、目標"],
+  ["手法と仮定", "手順、上位2クラスとの違い、成り立つための仮定"],
+  ["実験", "仮定の確かめ方、実験の設定、結果"],
+  ["課題と今後", "課題、今後の計画、まとめ"],
+];
+function agenda(active) {
+  const next = AGENDA[active][0];
+  const s = newSlide("CONTENT", "目次", active === 0 ? "最初に全体の流れです。" : `次は「${next}」です。`);
+  AGENDA.forEach(([name, desc], i) => {
+    const y = 1.45 + i * 1.05;
+    const on = i === active;
+    if (on) card(s, 0.6, y - 0.12, 12.1, 0.95, "FBE6DF");
+    s.addShape(pres.shapes.OVAL, { x: 0.9, y: y + 0.05, w: 0.6, h: 0.6, fill: { color: on ? C.accent1 : C.accent5, transparency: on ? 0 : 55 }, line: { color: on ? C.accent1 : C.accent5, transparency: on ? 0 : 55 } });
+    s.addText(String(i + 1), { isTextBox: true, x: 0.9, y: y + 0.05, w: 0.6, h: 0.6, margin: 0, align: "center", valign: "middle", fontSize: 20, bold: true, color: C.background1 });
+    s.addText(name, { isTextBox: true, x: 1.8, y, w: 3.6, h: 0.7, margin: 0, valign: "middle", fontSize: 24, bold: true, color: C.text1, transparency: on ? 0 : 70 });
+    s.addText(desc, { isTextBox: true, x: 5.4, y, w: 7.1, h: 0.7, margin: 0, valign: "middle", fontSize: 16, color: on ? C.text2 : C.text1, transparency: on ? 0 : 75 });
+  });
+  return s;
+}
+
 // ---------- slides ----------
 startSection("導入");
 
@@ -146,6 +171,8 @@ startSection("導入");
   text(s, "発表者名　／　2026-10-05", { x: 0.8, y: 5.1, w: 8, h: 0.4, fontSize: 16, color: C.background1 });
   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].forEach((k, i) => chip(s, 0.8 + i * 0.55, 6.2, k, CLS[k] || C.text2, 0.42));
 }
+
+agenda(0);
 
 {
   const s = newSlide("CONTENT", "今日の問い", "この発表では、数字認識の例を最初から最後まで使います。このAIは6と答えましたが、0の確率も0.4あり、迷っています。知りたいのは、画像のどこが0ではなく6という判断につながったかです。この問いに答えるのが、今日の目標です。\n\n（左の画像は手書き数字データの実際の画像。右の確率は説明のための例。）");
@@ -170,6 +197,7 @@ startSection("導入");
 }
 
 startSection("問題と発想");
+agenda(1);
 
 {
   const s = newSlide("CONTENT", "多クラス分類でのLIMEのやり方", "LIMEは本来、出力1本を説明する手法です。多クラスでは出力が10本あるので、LIMEを10回回すのと同じことをしています。公式の実装では説明するクラスを指定でき、ふつうは予測されたクラス、この例では6だけを見ます。");
@@ -271,31 +299,20 @@ startSection("問題と発想");
 }
 
 {
-  const s = newSlide("CONTENT", "発想", "説明したい画像のまわりだけを見ると、ほとんどのクラスは動きません。この例で動くのは0と6、それに9が少しです。この動きを少数の方向で表し、方向ごとに説明すれば、量も減り、クラス間の関係も直接読めるはずだ、というのが出発点です。");
-  const t = [0.2, -0.6, 0.9, -0.3, 0.5, -0.9, 0.1, 0.7, -0.4, 0.3, -0.7, 0.6];
-  const u = [0.3, -0.2, 0.1, 0.5, -0.4, 0.2, -0.1, 0.4, 0.0, -0.3, 0.2, -0.5];
-  const p6 = t.map((v, i) => +(0.5 + 0.25 * v - 0.02 * u[i]).toFixed(3));
-  const p9 = u.map((v) => +(0.05 + 0.04 * v).toFixed(3));
-  const p0 = p6.map((v, i) => +(0.95 - v - p9[i] - 0.003).toFixed(3));
-  const pOther = t.map((v, i) => +(0.007 + 0.002 * Math.sin(i)).toFixed(3));
-  const labels = t.map((_, i) => String(i + 1));
-  s.addChart(pres.charts.LINE, [
-    { name: "6", labels, values: p6 }, { name: "0", labels, values: p0 },
-    { name: "9", labels, values: p9 }, { name: "残り7クラス（それぞれ）", labels, values: pOther },
-  ], {
-    x: 0.6, y: 1.35, w: 7.2, h: 5.4, chartColors: [HEX.accent1, HEX.accent2, HEX.accent3, HEX.accent5], lineSize: 2.5, lineDataSymbol: "circle", lineDataSymbolSize: 7,
-    valAxisMinVal: 0, valAxisMaxVal: 0.8, valAxisLabelFormatCode: "0.0", showLegend: true, legendPos: "b", showTitle: true, title: "摂動画像ごとのAIの確率（例）", catAxisTitle: "摂動画像", showCatAxisTitle: true, catAxisTitleFontSize: 12, catAxisTitleColor: HEX.dk2, ...chartText, ...chartFrame(),
-  });
-  card(s, 8.2, 1.5, 4.5, 5.1);
+  const s = newSlide("CONTENT", "発想", "入力空間は、10クラスそれぞれの領域に分かれています。ただ、説明したい点のまわりだけを見ると、そこに入ってくる領域は0・6・9の3つくらいです。残りの7クラスの領域は遠くにあるので、摂動しても確率はほぼ0のまま動きません。それなら、確率の動きは少数の方向で表せるはずです。方向ごとに説明すれば、量も減り、クラス間の関係も直接読める、というのが出発点です。\n\n（図は説明のためのイメージ。実際の入力空間はもっと高次元。）");
+  s.addImage({ path: REGION_FIGURE, x: 0.6, y: 1.4, w: 8.3, h: 4.32 });
+  text(s, "（説明のためのイメージ）", { x: 0.6, y: 5.8, w: 8.3, h: 0.3, fontSize: 11, color: C.text2 });
+  card(s, 9.2, 1.4, 3.5, 5.35);
   bullets(s, [
-    "説明したい画像のまわりだけを見ると、確率が動くのは0・6・9くらい",
-    "残りの7クラスは、隠し方を変えてもほぼ0のまま",
+    "入力空間は、10クラスの領域に分かれている",
+    "説明したい点のまわりに入ってくるのは、0・6・9の3つくらい",
+    "残りの7クラスは、摂動してもほぼ0のまま",
     "それなら、確率の動きは少数の方向で表せるはず",
-  ], { x: 8.45, y: 1.75, w: 4.0, h: 3.2 });
-  text(s, "方向の例", { x: 8.45, y: 5.0, w: 4.0, h: 0.35, fontSize: 13, color: C.text2 });
-  chip(s, 8.45, 5.35, 0, C.accent2, 0.5); text(s, "↓", { x: 9.0, y: 5.35, w: 0.4, h: 0.5, fontSize: 22, bold: true, valign: "middle", color: C.accent2 });
-  chip(s, 9.5, 5.35, 6, C.accent1, 0.5); text(s, "↑", { x: 10.05, y: 5.35, w: 0.4, h: 0.5, fontSize: 22, bold: true, valign: "middle", color: C.accent1 });
-  text(s, "0が下がり、6が上がる", { x: 8.45, y: 5.95, w: 4.0, h: 0.4, fontSize: 14 });
+  ], { x: 9.4, y: 1.6, w: 3.15, h: 3.6, fontSize: 15 });
+  text(s, "方向の例", { x: 9.4, y: 5.25, w: 3.1, h: 0.3, fontSize: 12, color: C.text2 });
+  chip(s, 9.4, 5.6, 0, C.accent2, 0.45); text(s, "↓", { x: 9.9, y: 5.6, w: 0.35, h: 0.45, fontSize: 20, bold: true, valign: "middle", color: C.accent2 });
+  chip(s, 10.35, 5.6, 6, C.accent1, 0.45); text(s, "↑", { x: 10.85, y: 5.6, w: 0.35, h: 0.45, fontSize: 20, bold: true, valign: "middle", color: C.accent1 });
+  text(s, "0が下がり、6が上がる", { x: 9.4, y: 6.15, w: 3.2, h: 0.4, fontSize: 14 });
 }
 
 {
@@ -329,6 +346,7 @@ startSection("問題と発想");
 }
 
 startSection("手法と仮定");
+agenda(2);
 
 {
   const s = newSlide("CONTENT", "手法", "手順の違いは、回帰する目的変数だけです。通常のLIMEは「6の確率」を回帰しますが、この手法は「軸1のスコア」を回帰します。軸1が「6が上がり0が下がる」方向なら、スコアは6寄りか0寄りかを表す1つの数です。表の例では、Aを隠すと0寄りに、Bを隠すと6寄りに動きます。回帰で得られる係数は、Aが正、Bが負です。これをヒートマップにすれば、「Aがあるから6、Bがあるから0の可能性も残った」と1枚で読めます。軸はPCAで近傍の確率の動きから決めるので、どのクラスの対比を見るかを人が選ぶ必要はありません。");
@@ -406,33 +424,84 @@ startSection("手法と仮定");
 }
 
 startSection("実験");
+agenda(3);
 
 {
-  const sh = DATA.deviation.share;
-  const s = newSlide("CONTENT", "仮定1の確かめ方", "仮定1は、次のように確かめます。説明する点のまわりに摂動データを撒き、元の点の出力からどれだけずれたかをクラスごとに測ります。ずれの大きいクラスから足していき、全体の95%に届くまでのクラス数が「動くクラスの数」です。どのクラスもわずかには動くので、95%で区切っています。もう1つの「必要な軸の数」は、600点のずれがいくつの向きで表せるかを数えたものです。0と6が入れ替わるだけなら、どのずれも「0が下がり6が上がる」向きなので、1つで足ります。\n\n右のグラフは手書き数字データの実際の説明点の1つ（正解2）。2・3・9の3クラスでずれの97%を占め、動くクラスの数は3、必要な軸の数は2だった。");
+  const dev = DATA.deviation;
+  const sh = dev.share;
+  const s = newSlide("CONTENT", "仮定1の確かめ方（1）動くクラスの数", "仮定1は、手書き数字の実際の説明点1つを例に説明します。この点では、AIの確率は2が0.39、3が0.39、9が0.12でした。まず、この点のまわりに摂動データを600点撒き、それぞれの確率を出します。次に、摂動データの確率から元の点の確率を引いて「ずれ」を求めます。引き算をするのは、確率が高くても動かないクラスを数えないためです。最後に、クラスごとにずれの2乗を600点分足し合わせ、大きい順に並べます。この例では、2・3・9の3クラスでずれ全体の97%を占めるので、動くクラスは3個です。");
   const steps = [
     ["摂動データを撒く", "説明する点のまわりに、小さい半径で600点"],
-    ["元の出力からのずれを測る", "摂動データごとにAIの確率を出し、元の点の確率との差を取る"],
-    ["動くクラスの数", "ずれの大きいクラスから順に足し、全体のずれの95%に届くまでのクラス数"],
-    ["必要な軸の数", "600点のずれを表すのに必要な向きの数（全体のずれの95%まで）"],
+    ["元の点の確率との差（ずれ）を取る", ""],
+    ["クラスごとにずれを集計する", "ずれの2乗を600点分足し、大きい順に全体の95%に届くまでのクラス数を数える"],
   ];
+  const ys = [1.4, 2.45, 5.05];
   steps.forEach(([t, d], i) => {
-    badge(s, 0.6, 1.45 + i * 1.32, i + 1, i >= 2 ? C.accent1 : C.text1, 0.45);
-    text(s, t, { x: 1.2, y: 1.42 + i * 1.32, w: 4.6, h: 0.45, fontSize: 17, bold: true });
-    text(s, d, { x: 1.2, y: 1.87 + i * 1.32, w: 4.6, h: 0.8, fontSize: 13, color: C.text2 });
+    badge(s, 0.6, ys[i], i + 1, i === 2 ? C.accent1 : C.text1, 0.45);
+    text(s, t, { x: 1.2, y: ys[i] - 0.03, w: 4.8, h: 0.45, fontSize: 17, bold: true });
+    if (d) text(s, d, { x: 1.2, y: ys[i] + 0.45, w: 4.8, h: 0.8, fontSize: 13, color: C.text2 });
   });
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const pick = (v) => { const t = [v[2], v[3], v[9]].map(r2); return [...t, r2(1 - t[0] - t[1] - t[2])]; };
+  const fmt = (x) => x.toFixed(2);
+  const sig = (x) => (x > 0.004 ? "+" : x < -0.004 ? "−" : "") + Math.abs(x).toFixed(2);
+  const p0 = pick(dev.probs), p1 = pick(dev.example_perturbed);
+  const d1 = p1.map((v, i) => r2(v - p0[i]));
+  const cellc = (t, o) => ({ text: t, options: { align: "center", fill: { color: C.background1 }, ...o } });
+  s.addTable([
+    [cellc("", { fill: { color: C.text1 } }), cellc("2", { bold: true, color: C.background1, fill: { color: C.text1 } }), cellc("3", { bold: true, color: C.background1, fill: { color: C.text1 } }), cellc("9", { bold: true, color: C.background1, fill: { color: C.text1 } }), cellc("その他", { bold: true, color: C.background1, fill: { color: C.text1 } })],
+    [cellc("説明する点", { align: "left" }), ...p0.map((v) => cellc(fmt(v)))],
+    [cellc("摂動データの1つ", { align: "left" }), ...p1.map((v) => cellc(fmt(v)))],
+    [cellc("ずれ", { align: "left", bold: true, color: C.accent1, fill: { color: C.background2 } }), ...d1.map((v) => cellc(sig(v), { bold: true, color: C.accent1, fill: { color: C.background2 } }))],
+  ], { x: 1.2, y: 3.0, w: 4.9, colW: [1.7, 0.8, 0.8, 0.8, 0.8], rowH: 0.42, fontSize: 13, color: C.text1, border: { type: "solid", pt: 1, color: "DDE2EA" }, valign: "middle", margin: [2, 4, 2, 4] });
   const pct = sh.map((v) => +(100 * v).toFixed(1));
   s.addChart(pres.charts.BAR, [{ name: "ずれの割合", labels: pct.map((_, k) => String(k)), values: pct }], {
-    x: 6.2, y: 1.35, w: 6.5, h: 4.45, barDir: "col", barGapWidthPct: 40,
+    x: 6.4, y: 1.35, w: 6.3, h: 4.45, barDir: "col", barGapWidthPct: 40,
     chartColors: pct.map((_, k) => (k === 2 || k === 3 || k === 9 ? HEX.accent1 : HEX.accent5)),
     showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0", valAxisMinVal: 0, valAxisMaxVal: 50, valAxisLabelFormatCode: "0", showLegend: false,
-    showTitle: true, title: "手書き数字の説明点1つでの、クラスごとのずれの割合（%）", catAxisTitle: "クラス", ...chartText, ...chartFrame(),
+    showTitle: true, title: "クラスごとのずれの割合（%、600点分の合計）", catAxisTitle: "クラス", ...chartText, ...chartFrame(),
   });
-  card(s, 6.2, 5.95, 6.5, 0.8, C.background2);
+  card(s, 6.4, 5.95, 6.3, 0.8, C.background2);
   s.addText([
-    { text: "動くクラスの数 ", options: { color: C.text2 } }, { text: "3", options: { bold: true, color: C.accent1 } },
-    { text: "（2・3・9で97%）　必要な軸の数 ", options: { color: C.text2 } }, { text: "2", options: { bold: true, color: C.accent1 } },
-  ], { isTextBox: true, x: 6.4, y: 5.95, w: 6.2, h: 0.8, margin: 0, fontSize: 15, valign: "middle" });
+    { text: "2・3・9で全体の97%　→　動くクラス ", options: { color: C.text1 } }, { text: "3個", options: { bold: true, color: C.accent1 } },
+  ], { isTextBox: true, x: 6.65, y: 5.95, w: 5.9, h: 0.8, margin: 0, fontSize: 17, valign: "middle" });
+}
+
+{
+  const dev = DATA.deviation;
+  const [a1, a2] = dev.axis_share;
+  const s = newSlide("CONTENT", "仮定1の確かめ方（2）必要な軸の数", `次は必要な軸の数です。600個のずれは、それぞれ10個の数の組、つまり10次元の点です。この点の集まりを、何本の向きの組み合わせで表せるかを数えます。向きはPCAで、ずれをよく表す順に求めます。この例では、1本目の向き（2が下がり、3と9が上がる）でずれ全体の${Math.round(a1 * 100)}%、2本目（9が下がり、3と2が上がる）まで使うと${Math.round((a1 + a2) * 100)}%を表せました。95%に届くのが2本目なので、必要な軸は2本です。右の図は、ずれを2本の軸の上に並べたもので、点が1本目の方向に長く伸び、2本目の方向にも少し広がっています。動くクラスが3個なので、軸は多くても2本です。`);
+  const items = [
+    ["600個のずれを、10次元の点として並べる", "ずれは10個の数の組。和はいつも0"],
+    ["向き（軸）をPCAで、よく表す順に求める", "軸ごとに、ずれ全体の何%を表すかが分かる"],
+    ["95%に届くまでの軸の本数を数える", ""],
+  ];
+  items.forEach(([t, d], i) => {
+    const y = 1.4 + i * 1.15;
+    badge(s, 0.6, y, i + 1, i === 2 ? C.accent1 : C.text1, 0.45);
+    text(s, t, { x: 1.2, y: y - 0.03, w: 5.0, h: 0.45, fontSize: 16, bold: true });
+    if (d) text(s, d, { x: 1.2, y: y + 0.45, w: 5.0, h: 0.5, fontSize: 13, color: C.text2 });
+  });
+  const axisCard = (y, name, share, desc, weights) => {
+    card(s, 1.2, y, 5.0, 0.95, C.background2);
+    s.addText([{ text: `${name}　`, options: { bold: true } }, { text: `${share}%`, options: { bold: true, color: C.accent1 } }, { text: `　${desc}`, options: {} }], { isTextBox: true, x: 1.4, y: y + 0.06, w: 4.7, h: 0.45, margin: 0, fontSize: 15, color: C.text1, valign: "middle" });
+    text(s, weights, { x: 1.4, y: y + 0.5, w: 4.7, h: 0.35, fontSize: 12, color: C.text2 });
+  };
+  const L = dev.axis_loadings;
+  const w = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2);
+  axisCard(4.15, "軸1", Math.round(a1 * 100), "2が下がり、3と9が上がる", `重み　2: ${w(L[0][2])}　3: ${w(L[0][3])}　9: ${w(L[0][9])}`);
+  axisCard(5.2, "軸2", Math.round(a2 * 100), "9が下がり、3と2が上がる", `重み　2: ${w(L[1][2])}　3: ${w(L[1][3])}　9: ${w(L[1][9])}`);
+  s.addShape(pres.shapes.ROUNDED_RECTANGLE, { x: 1.2, y: 6.25, w: 5.0, h: 0.5, rectRadius: 0.08, fill: { color: C.text1 }, line: { color: C.text1 } });
+  s.addText([{ text: `軸1で${Math.round(a1 * 100)}%、軸2まで${Math.round((a1 + a2) * 100)}% → 必要な軸 `, options: { color: C.background1 } }, { text: "2本", options: { bold: true, color: C.accent3 } }], { isTextBox: true, x: 1.35, y: 6.25, w: 4.8, h: 0.5, margin: 0, fontSize: 14, valign: "middle" });
+  const sc = dev.scores;
+  s.addChart(pres.charts.SCATTER, [{ name: "軸1", values: sc.map((v) => v[0]) }, { name: "軸2", values: sc.map((v) => v[1]) }], {
+    x: 6.6, y: 1.35, w: 6.1, h: 5.4, lineSize: 0, lineDataSymbol: "circle", lineDataSymbolSize: 5, chartColors: [HEX.accent1],
+    valAxisMinVal: -0.3, valAxisMaxVal: 0.3, catAxisMinVal: -0.3, catAxisMaxVal: 0.3, valAxisLabelFormatCode: "0.0", catAxisLabelFormatCode: "0.0",
+    valAxisCrossesAt: -0.3, catAxisCrossesAt: -0.3,
+    showLegend: false, showTitle: true, title: "ずれを軸1・軸2の上に並べた図（200点）",
+    showCatAxisTitle: true, catAxisTitle: `軸1（${Math.round(a1 * 100)}%）`, showValAxisTitle: true, valAxisTitle: `軸2（${Math.round(a2 * 100)}%）`,
+    catAxisTitleFontSize: 12, valAxisTitleFontSize: 12, catAxisTitleColor: HEX.dk2, valAxisTitleColor: HEX.dk2, ...chartText, ...chartFrame(),
+  });
 }
 
 {
@@ -452,53 +521,49 @@ startSection("実験");
 }
 
 {
-  const s = newSlide("CONTENT", "結果1　局所的には少数の方向にしか動かない", "どのデータでも、近傍で確率が動くクラスは3つ前後で、出力は2本前後の軸で表せました。26クラスの文字認識でも同じです。必要な軸の数は動くクラスの数より1つ前後少なく、2クラスが動くなら1軸、3クラスなら2軸という仮定1の説明とおおむね合います。つまり、低次元になる主な理由は、近傍で競合するクラスが少ないことです。ただ、手書き数字とyeastでは、軸の数がそれよりさらに少ない近傍が3〜4割ありました。これは、複数のクラスがまとまって動いていることを表しています。半径を0.4に広げると、文字認識では動くクラスが5つ程度に増えます。SVMでも同じ傾向で、軸の数は平均1.4〜1.9本でした。");
-  const labels = ["手書き数字（10）", "文字認識（26）", "yeast（9）", "ワイン品質（6）"];
-  s.addChart(pres.charts.BAR, [
-    { name: "動くクラスの数", labels, values: [3.04, 2.85, 3.88, 2.81] },
-    { name: "必要な軸の数", labels, values: [1.71, 1.90, 2.17, 1.68] },
-  ], {
-    x: 0.6, y: 1.35, w: 7.4, h: 4.6, barDir: "col", barGrouping: "clustered", barGapWidthPct: 60, chartColors: [HEX.accent5, HEX.accent1],
-    showValue: true, dataLabelPosition: "outEnd", dataLabelFormatCode: "0.0", valAxisMinVal: 0, valAxisMaxVal: 5, valAxisLabelFormatCode: "0",
-    showLegend: true, legendPos: "b", showTitle: true, title: "MLP、半径0.15（かっこ内はクラス数）", ...chartText, ...chartFrame(),
-  });
-  card(s, 8.3, 1.35, 4.4, 4.6);
+  const s = newSlide("CONTENT", "結果1　局所的には少数の方向にしか動かない", "どのデータでも、近傍で確率が動くクラスは3個前後で、出力は2本前後の軸で表せました。26クラスの文字認識でも同じです。必要な軸の数は動くクラスの数より1つ前後少なく、2クラスが動くなら1本、3クラスなら2本という仮定1の説明とおおむね合います。つまり、低次元になる主な理由は、近傍で競合するクラスが少ないことです。ただ、手書き数字とyeastでは、軸の数がそれよりさらに少ない近傍が3〜4割ありました。これは、複数のクラスがまとまって動いていることを表しています。半径を0.4に広げると、文字認識では動くクラスが5個程度に増えます。SVMでも同じ傾向で、軸の数は平均1.4〜1.9本でした。");
+  const hd = (t, al) => ({ text: t, options: { bold: true, color: C.background1, fill: { color: C.text1 }, align: al || "center" } });
+  const cl = (t, i, o) => ({ text: t, options: { align: "center", fill: { color: i % 2 ? C.background1 : C.background2 }, ...o } });
+  const rows = [["手書き数字", "10", "3.04", "1.71"], ["文字認識", "26", "2.85", "1.90"], ["yeast", "9", "3.88", "2.17"], ["ワイン品質", "6", "2.81", "1.68"]];
+  s.addTable([
+    [hd("データ", "left"), hd("クラス数"), hd("動くクラス（個）"), { text: "必要な軸（本）", options: { bold: true, color: C.background1, fill: { color: C.accent1 }, align: "center" } }],
+    ...rows.map((r, i) => [cl(r[0], i, { align: "left" }), cl(r[1], i), cl(r[2], i), cl(r[3], i, { bold: true, color: C.accent1 })]),
+  ], { x: 0.6, y: 1.5, w: 7.5, colW: [2.1, 1.5, 2.0, 1.9], rowH: 0.75, fontSize: 18, color: C.text1, border: { type: "solid", pt: 1, color: "FFFFFF" }, valign: "middle", margin: [4, 10, 4, 10] });
+  text(s, "MLP、半径0.15。元の出力からのずれで測った平均（出力がほぼ一定の近傍は除く）", { x: 0.6, y: 5.45, w: 7.5, h: 0.6, fontSize: 12, color: C.text2 });
+  card(s, 8.4, 1.5, 4.3, 5.2);
   bullets(s, [
-    "26クラスの文字認識でも、近傍で動くクラスは3つ前後、軸は2本前後",
-    "必要な軸の数は、動くクラスの数より1つ前後少ない",
+    "26クラスの文字認識でも、動くクラスは3個前後、軸は2本前後",
+    "必要な軸は、動くクラスより1つ前後少ない",
     { sub: true, text: "低次元の主な理由は、近傍で競合するクラスが少ないこと" },
     { sub: true, text: "手書き数字とyeastでは、複数のクラスがまとまって動く近傍もあった（32%、45%）" },
     "SVMでも同じ傾向（軸は平均1.4〜1.9本）",
-  ], { x: 8.55, y: 1.6, w: 3.95, h: 4.2, fontSize: 15, subSize: 13 });
-  text(s, "値は元の出力からのずれで測った平均。出力がほぼ一定の近傍は除いた", { x: 0.6, y: 6.15, w: 12, h: 0.35, fontSize: 11, color: C.text2 });
+  ], { x: 8.65, y: 1.75, w: 3.85, h: 4.8, fontSize: 15, subSize: 13 });
 }
 
 {
-  const s = newSlide("CONTENT", "結果2　通常のLIMEに劣らないか", "4つのデータのどれでも、3軸にまとめたときに失う R² は0.02未満でした。説明の量は大きく減りますが、忠実さはほとんど変わりません。一方で、軸を1本まで減らすと、yeastでは0.2ほど落ちます。結果1で見たとおり、必要な軸は2本前後なので、それより少なくすると表しきれません。SVMでも、3軸で失う R² は0.001〜0.015でした。なお、文字認識では通常のLIME自体の R² が0.5程度と低く、これは次の課題につながります。");
-  const labels = ["手書き数字", "文字認識", "yeast", "ワイン品質"];
-  s.addChart(pres.charts.BAR, [
-    { name: "1軸", labels, values: [0.783, 0.434, 0.765, 0.863] },
-    { name: "2軸", labels, values: [0.855, 0.483, 0.936, 0.969] },
-    { name: "3軸", labels, values: [0.868, 0.491, 0.967, 0.976] },
-    { name: "通常のLIME", labels, values: [0.874, 0.494, 0.974, 0.977] },
-  ], {
-    x: 0.6, y: 1.35, w: 7.6, h: 4.9, barDir: "col", barGrouping: "clustered", barGapWidthPct: 50, chartColors: ["F2B8A6", "E5835F", HEX.accent1, HEX.dk1],
-    showValue: false, valAxisMinVal: 0, valAxisMaxVal: 1, valAxisLabelFormatCode: "0.0", showLegend: true, legendPos: "b",
-    showTitle: true, title: "学習に使っていない摂動での R²（MLP、半径0.15）", ...chartText, ...chartFrame(),
-  });
-  card(s, 8.5, 1.35, 4.2, 1.9, C.text1);
-  text(s, "3軸にまとめたときに失う R²", { x: 8.75, y: 1.5, w: 3.8, h: 0.35, fontSize: 13, color: C.accent5 });
-  text(s, "0.017以下", { x: 8.75, y: 1.9, w: 3.8, h: 0.8, fontSize: 40, bold: true, color: C.background1 });
-  text(s, "4データ・2半径、MLP", { x: 8.75, y: 2.75, w: 3.8, h: 0.35, fontSize: 12, color: C.accent5 });
+  const s = newSlide("CONTENT", "結果2　通常のLIMEに劣らないか", "4つのデータのどれでも、3本にまとめたときに失う R² は0.02未満でした。説明の量は大きく減りますが、忠実さはほとんど変わりません。一方で、軸を1本まで減らすと、yeastでは0.2ほど落ちます。結果1で見たとおり、必要な軸は2本前後なので、それより少なくすると表しきれません。SVMでも、3本で失う R² は0.001〜0.015でした。なお、文字認識では通常のLIME自体の R² が0.5程度と低く、これは次の課題につながります。");
+  const hd = (t, fill) => ({ text: t, options: { bold: true, color: C.background1, fill: { color: fill || C.text1 }, align: "center" } });
+  const cl = (t, i, o) => ({ text: t, options: { align: "center", fill: { color: i % 2 ? C.background1 : C.background2 }, ...o } });
+  const rows = [["手書き数字", "0.783", "0.855", "0.868", "0.874"], ["文字認識", "0.434", "0.483", "0.491", "0.494"], ["yeast", "0.765", "0.936", "0.967", "0.974"], ["ワイン品質", "0.863", "0.969", "0.976", "0.977"]];
+  s.addTable([
+    [{ text: "データ", options: { bold: true, color: C.background1, fill: { color: C.text1 } } }, hd("軸1本"), hd("軸2本"), hd("軸3本", C.accent1), hd("通常のLIME")],
+    ...rows.map((r, i) => [cl(r[0], i, { align: "left" }), cl(r[1], i, { color: C.text2 }), cl(r[2], i), cl(r[3], i, { bold: true, color: C.accent1 }), cl(r[4], i, { bold: true })]),
+  ], { x: 0.6, y: 1.5, w: 7.6, colW: [2.0, 1.4, 1.4, 1.4, 1.4], rowH: 0.75, fontSize: 18, color: C.text1, border: { type: "solid", pt: 1, color: "FFFFFF" }, valign: "middle", margin: [4, 10, 4, 10] });
+  text(s, "学習に使っていない摂動での R²（MLP、半径0.15）", { x: 0.6, y: 5.45, w: 7.6, h: 0.4, fontSize: 12, color: C.text2 });
+  card(s, 8.5, 1.5, 4.2, 1.9, C.text1);
+  text(s, "3本にまとめたときに失う R²", { x: 8.75, y: 1.65, w: 3.8, h: 0.35, fontSize: 13, color: C.accent5 });
+  text(s, "0.017以下", { x: 8.75, y: 2.05, w: 3.8, h: 0.8, fontSize: 40, bold: true, color: C.background1 });
+  text(s, "4データ・2半径、MLP", { x: 8.75, y: 2.9, w: 3.8, h: 0.35, fontSize: 12, color: C.accent5 });
   bullets(s, [
     "係数は640個（64画素×10クラス）から222個に減る（手書き数字）",
-    "1軸だと失う量は0.06〜0.22",
+    "1本だと失う量は0.06〜0.22",
     { sub: true, text: "2本前後より減らすと落ちる" },
-    "SVMでも3軸の損失は0.015以下",
-  ], { x: 8.5, y: 3.5, w: 4.2, h: 3.0, fontSize: 15, subSize: 13 });
+    "SVMでも3本の損失は0.015以下",
+  ], { x: 8.5, y: 3.65, w: 4.2, h: 3.0, fontSize: 15, subSize: 13 });
 }
 
 startSection("課題と今後");
+agenda(4);
 
 {
   const s = newSlide("CONTENT", "課題", "課題は2つあります。1つ目は軸の読みやすさです。PCAの軸は、複数のクラスに重みが分かれることがあります。柴犬が上がって秋田犬と三毛猫が下がる形なら「柴犬の確率は主に秋田犬から来た」と読めますが、柴犬と三毛猫が同じ側に並ぶと意味が取れません。次元を減らすだけでは足りず、減らした後の軸が理解できることも条件になります。2つ目は、通常のLIME自体の忠実さが低い条件があることです。この手法は通常のLIMEを少数の軸で近似するものなので、その限界は引き継ぎます。");
