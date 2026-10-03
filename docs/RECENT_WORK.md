@@ -33,7 +33,12 @@
   （`fisher_lime/diagnostics.py`の`deviation_from_reference`、テスト2件）。
   `unified_local_evaluation.py`の`neighborhoods.csv`に`moving_classes_from_target`、
   `axes_from_target_q95`、`deviation_energy`を出力し、`mechanism_summary.csv`に平均を追加。
-  スライド11枚目を手順の説明に書き直した。12枚目の数値は再実行の完了後に差し替える（作業中）。
+  スライド11枚目を手順の説明に書き直し、`python3 experiments/unified_local_evaluation.py --neighborhoods data`
+  の再実行結果で12枚目を差し替えた。MLPの動くクラス／必要な軸は 10クラス半径0.15で2.54／1.49、
+  20クラス半径0.4で4.51／3.45。軸が「動くクラス − 1」未満の近傍は2〜13%で、従来の分散基準と
+  結論は同じ。RF 20クラスは動くクラス13〜14、軸10〜11。忠実性の数値は変化なし。
+  注意: 必要な軸の数は元の出力を中心にした向きの数で、圧縮に使うPCA（重み付き平均が中心）とは
+  中心が違う。小さい近傍では差は小さい（MLPで差0.05〜0.36軸）。
 - 結果スライドの数値のため`python3 experiments/unified_local_evaluation.py --neighborhoods data`を
   再実行した。数値は前回の記録と一致（MLP 3軸の追加R²損失 0.002〜0.020、RF 0.056〜0.133）。
 
