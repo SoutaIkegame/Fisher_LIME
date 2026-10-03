@@ -9,6 +9,7 @@ from .local_dimension import (
 from .output_projection import (
     LinearOutputProjection,
     axis_complexity,
+    class_contrast_projection,
     fit_weighted_sparse_pca,
     rotate_weighted_pca,
     varimax_rotation,
@@ -21,6 +22,7 @@ __all__ = [
     "fit_weighted_pca",
     "LinearOutputProjection",
     "axis_complexity",
+    "class_contrast_projection",
     "fit_weighted_sparse_pca",
     "rotate_weighted_pca",
     "varimax_rotation",
