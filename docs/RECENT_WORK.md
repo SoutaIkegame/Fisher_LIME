@@ -29,6 +29,11 @@
   同梱リンターでスコア89/100（残る警告は箇条書き比率のみ。スライド本文のため許容）。
   その後、問題点1を「説明の量」から「比べるクラスを人が決めている」に変更し
   （実際は上位2クラスしか見ないというユーザー指摘）、6枚目の「自由に動けるのは9方向」を削除した。
+- 動くクラスの数と必要な軸の数を、説明点の元の出力からのずれで測る指標を追加した
+  （`fisher_lime/diagnostics.py`の`deviation_from_reference`、テスト2件）。
+  `unified_local_evaluation.py`の`neighborhoods.csv`に`moving_classes_from_target`、
+  `axes_from_target_q95`、`deviation_energy`を出力し、`mechanism_summary.csv`に平均を追加。
+  スライド11枚目を手順の説明に書き直した。12枚目の数値は再実行の完了後に差し替える（作業中）。
 - 結果スライドの数値のため`python3 experiments/unified_local_evaluation.py --neighborhoods data`を
   再実行した。数値は前回の記録と一致（MLP 3軸の追加R²損失 0.002〜0.020、RF 0.056〜0.133）。
 

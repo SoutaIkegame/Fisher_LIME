@@ -84,6 +84,54 @@ def class_activity(
 
 
 @dataclass(frozen=True)
+class DeviationActivity:
+    """Moving classes and directions measured from a reference output."""
+
+    moving_classes: int
+    effective_dimension_95: int
+    deviation_energy: float
+
+
+def deviation_from_reference(
+    probabilities: np.ndarray,
+    weights: np.ndarray,
+    reference: np.ndarray,
+    share: float = 0.95,
+) -> DeviationActivity:
+    """Count moving classes and directions of the deviation from ``reference``.
+
+    Each perturbed output is compared with the black box's output at the
+    explained point. ``moving_classes`` is the smallest number of classes
+    whose weighted squared deviations cover ``share`` of the total, and
+    ``effective_dimension_95`` is the smallest number of directions (an
+    uncentered weighted PCA of the deviations) covering the same share.
+    Both outputs sum to one, so m moving classes span at most m - 1
+    directions.
+    """
+
+    probabilities = np.asarray(probabilities, dtype=float)
+    weights = np.asarray(weights, dtype=float)
+    reference = np.asarray(reference, dtype=float)
+    if reference.shape != (probabilities.shape[1],):
+        raise ValueError("reference must have one value per class")
+    normalized = weights / weights.sum()
+    deviation = probabilities - reference
+    per_class = np.sum(normalized[:, None] * deviation**2, axis=0)
+    total = float(per_class.sum())
+    if total <= np.finfo(float).eps:
+        return DeviationActivity(0, 0, 0.0)
+    ordered = np.sort(per_class)[::-1] / total
+    moving = int(min(np.searchsorted(np.cumsum(ordered), share) + 1, ordered.size))
+    singular = np.linalg.svd(
+        np.sqrt(normalized)[:, None] * deviation, compute_uv=False
+    )
+    explained = singular**2 / total
+    dimension = int(np.searchsorted(np.cumsum(explained), share) + 1)
+    dimension = min(dimension, probabilities.shape[1] - 1)
+    return DeviationActivity(moving, dimension, total)
+
+
+@dataclass(frozen=True)
 class MatrixDimension:
     """Effective rank summary of a feature-by-class coefficient matrix."""
 

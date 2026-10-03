@@ -6,6 +6,7 @@ from experiments.compare_pca_lime import generate_neighborhood
 from fisher_lime.diagnostics import (
     NeighborhoodSampler,
     class_activity,
+    deviation_from_reference,
     coefficient_matrix_dimension,
     linear_energy_in_subspace,
     weighted_feature_covariance,
@@ -21,6 +22,31 @@ def softmax(logits: np.ndarray) -> np.ndarray:
 
 
 class DiagnosticsTest(unittest.TestCase):
+    def test_deviation_from_reference_two_way_swap(self) -> None:
+        rng = np.random.default_rng(1)
+        t = rng.normal(scale=0.05, size=300)
+        reference = np.array([0.4, 0.5, 0.05, 0.05])
+        probabilities = np.tile(reference, (300, 1))
+        probabilities[:, 0] -= t
+        probabilities[:, 1] += t
+        result = deviation_from_reference(probabilities, np.ones(300), reference)
+
+        self.assertEqual(result.moving_classes, 2)
+        self.assertEqual(result.effective_dimension_95, 1)
+
+    def test_deviation_from_reference_ignores_constant_high_class(self) -> None:
+        rng = np.random.default_rng(2)
+        t = rng.normal(scale=0.05, size=(300, 2))
+        reference = np.array([0.5, 0.2, 0.2, 0.1])
+        probabilities = np.tile(reference, (300, 1))
+        probabilities[:, 1] += t[:, 0]
+        probabilities[:, 2] += t[:, 1]
+        probabilities[:, 3] -= t.sum(axis=1)
+        result = deviation_from_reference(probabilities, np.ones(300), reference)
+
+        self.assertEqual(result.moving_classes, 3)
+        self.assertEqual(result.effective_dimension_95, 2)
+
     def test_rank_one_coefficients_have_one_linear_dimension(self) -> None:
         coefficients = np.outer([1.0, -2.0, 0.5], [1.0, -1.0, 0.0, 0.0])
         result = coefficient_matrix_dimension(coefficients)
