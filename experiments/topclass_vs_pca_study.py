@@ -50,6 +50,7 @@ from experiments.unified_local_evaluation import add_strata, hierarchical_bootst
 from fisher_lime.diagnostics import (
     NeighborhoodSampler,
     class_activity,
+    deviation_from_reference,
     weighted_output_r2,
 )
 from fisher_lime.local_dimension import analyze_local_probabilities, fit_weighted_pca
@@ -211,6 +212,7 @@ def evaluate_configuration(
 
                 analysis = analyze_local_probabilities(fit_p, fit_w)
                 activity = class_activity(fit_p, fit_w)
+                deviation = deviation_from_reference(fit_p, fit_w, target_probability)
                 normalized = fit_w / fit_w.sum()
                 class_variance = np.sum(
                     normalized[:, None]
@@ -245,6 +247,9 @@ def evaluate_configuration(
                     {
                         **common,
                         "variation_energy": analysis.variation_energy,
+                        "moving_classes_from_target": deviation.moving_classes,
+                        "axes_from_target_q95": deviation.effective_dimension_95,
+                        "deviation_energy": deviation.deviation_energy,
                         "top1_probability": float(target_probability[top_classes[0]]),
                         "top3_probability": float(target_probability[top_classes[2]]),
                         "top2_variance_share": (
