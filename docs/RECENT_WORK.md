@@ -122,6 +122,10 @@
   「この研究の方向」に変え，「関連研究もクラス間の関係を扱う [2, 4]」と代表的な2本だけを
   スライド下に引用（[2] LIMETREEは8枚目と同じ番号，[4] Franceschi et al., Distributional Values, ICML 2024）。
 
+- 10/05（続き2）: p17「仮定1の確かめ方（2）」を寄与率・累積寄与率の言葉で書き直した1枚だけのpptxを
+  `docs/seminar/slide17_cumulative.pptx`として出力（ユーザーが自分のデッキに差し込む用．本体の
+  `2026-10-05_seminar.pptx`は未変更）．ノートも累積寄与率で説明する文に変更．
+
 ### 未完了・次の作業
 
 1. PowerPoint版 `docs/seminar/2026-10-05_seminar.pptx`（本編21枚＋目次5枚＋付録4枚、話すことはノート）を作成済み。
