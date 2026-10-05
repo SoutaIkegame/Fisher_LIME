@@ -657,7 +657,7 @@ agenda(3);
 }
 
 {
-  const s = newSlide("CONTENT", "結果2　通常のLIMEに劣らないか", "4つのデータのどれでも、3本にまとめたときに失う R² は0.02未満でした。説明の量は大きく減りますが、忠実さはほとんど変わりません。一方で、軸を1本まで減らすと、yeastでは0.2ほど落ちます。結果1で見たとおり、必要な軸は2本前後なので、それより少なくすると表しきれません。SVMでも、3本で失う R² は0.001〜0.015でした。なお、文字認識では通常のLIME自体の R² が0.5程度と低く、これは次の課題につながります。");
+  const s = newSlide("CONTENT", "結果2　通常のLIMEに劣らないか", "4つのデータのどれでも、3本にまとめたときに失う R² は0.02未満でした。説明の量は大きく減りますが、忠実さはほとんど変わりません。一方で、軸を1本まで減らすと、yeastでは0.2ほど落ちます。結果1で見たとおり、必要な軸は2本前後なので、それより少なくすると表しきれません。SVMでも、3本で失う R² は0.001〜0.015でした。なお、実験ではスーパーピクセルではなく画素ごとに摂動したので、手書き数字の特徴は64個の画素です。係数は64画素×10クラスの640個から、64画素×3本の192個に減ります。ほかに、軸ごとのクラスの重みが30個付きます。なお、文字認識では通常のLIME自体の R² が0.5程度と低く、これは次の課題につながります。");
   const hd = (t, fill) => ({ text: t, options: { bold: true, color: C.background1, fill: { color: fill || C.text1 }, align: "center" } });
   const cl = (t, i, o) => ({ text: t, options: { align: "center", fill: { color: i % 2 ? C.background1 : C.background2 }, ...o } });
   const rows = [["手書き数字", "0.783", "0.855", "0.868", "0.874"], ["文字認識", "0.434", "0.483", "0.491", "0.494"], ["yeast", "0.765", "0.936", "0.967", "0.974"], ["ワイン品質", "0.863", "0.969", "0.976", "0.977"]];
@@ -665,13 +665,14 @@ agenda(3);
     [{ text: "データ", options: { bold: true, color: C.background1, fill: { color: C.text1 } } }, hd("軸1本"), hd("軸2本"), hd("軸3本", C.accent1), hd("通常のLIME")],
     ...rows.map((r, i) => [cl(r[0], i, { align: "left" }), cl(r[1], i, { color: C.text2 }), cl(r[2], i), cl(r[3], i, { bold: true, color: C.accent1 }), cl(r[4], i, { bold: true })]),
   ], { x: 0.6, y: 1.5, w: 7.6, colW: [2.0, 1.4, 1.4, 1.4, 1.4], rowH: 0.75, fontSize: 18, color: C.text1, border: { type: "solid", pt: 1, color: "FFFFFF" }, valign: "middle", margin: [4, 10, 4, 10] });
-  text(s, "学習に使っていない摂動での R²（MLP、半径0.15）", { x: 0.6, y: 5.45, w: 7.6, h: 0.4, fontSize: 12, color: C.text2 });
+  text(s, "学習に使っていない摂動での R²（MLP、半径0.15）。実験では画素ごとに摂動したので、手書き数字の特徴は64個の画素", { x: 0.6, y: 5.45, w: 7.6, h: 0.6, fontSize: 12, color: C.text2 });
   card(s, 8.5, 1.5, 4.2, 1.9, C.text1);
   text(s, "3本にまとめたときに失う R²", { x: 8.75, y: 1.65, w: 3.8, h: 0.35, fontSize: 13, color: C.accent5 });
   text(s, "0.017以下", { x: 8.75, y: 2.05, w: 3.8, h: 0.8, fontSize: 40, bold: true, color: C.background1 });
   text(s, "4データ・2半径、MLP", { x: 8.75, y: 2.9, w: 3.8, h: 0.35, fontSize: 12, color: C.accent5 });
   bullets(s, [
-    "係数は640個（64画素×10クラス）から222個に減る（手書き数字）",
+    "係数は640個（64画素×10クラス）から192個（64画素×3本）に減る（手書き数字）",
+    { sub: true, text: "ほかに、軸ごとのクラスの重みが30個（3本×10クラス）" },
     "1本だと失う量は0.06〜0.22",
     { sub: true, text: "2本前後より減らすと落ちる" },
     "SVMでも3本の損失は0.015以下",
