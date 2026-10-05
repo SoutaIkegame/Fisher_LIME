@@ -31,6 +31,8 @@ BBの出力側を局所的に圧縮する。
   held-out忠実性を対象ごとに記録する主実験
 - `experiments/topclass_vs_pca_study.py`: 実データ（PMLBミラーとdigits）で、上位クラス対比
   （X1 vs X2）・最も動くクラスの対比・PCAを同じ近傍と代理モデルで比較する
+- `experiments/switching_axis_study.py`: 予測の切り替わり（説明点の予測c0から別クラスへ）を，上位クラス対比・
+  動くクラス対比・切り替わり先クラス対比・PCA・soft Fisherのどの軸が再現するかを比較（flip_recall）
 - `experiments/run_local_dimension.py`: 合成データによる局所低次元性の初期実験
 - `experiments/global_local_dimension_study.py`: 評価データ上の大域・局所次元と
   同数ランダム対照の比較（補助実験。最近傍集合はLIME近傍より広く、次元は近傍内の
@@ -102,6 +104,7 @@ BBの出力側を局所的に圧縮する。
 python3 experiments/run_local_dimension.py
 python3 experiments/unified_local_evaluation.py
 python3 experiments/topclass_vs_pca_study.py
+python3 experiments/switching_axis_study.py
 python experiments/global_local_dimension_study.py
 python3 experiments/compare_pca_lime.py
 python experiments/pca_fidelity_tradeoff_study.py
